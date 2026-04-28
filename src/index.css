@@ -1,0 +1,28 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@100;300;400;500;700;900&family=Work+Sans:wght@100;200;300;400;500;600;700;800;900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.lexical h1 {
+  @apply block font-sans text-4xl font-semibold leading-[1.3] tracking-normal text-inherit antialiased;
+}
+.lexical h2 {
+  @apply block font-sans text-3xl font-semibold leading-snug tracking-normal text-inherit antialiased;
+}
+
+.lexical p {
+  @apply block font-sans text-base font-normal leading-relaxed text-inherit antialiased;
+}
+
+.lexical ul {
+  @apply list-inside list-disc;
+}
+
+.lexical ol {
+  @apply list-inside list-decimal;
+}
+
+.lexical .strikethrough {
+  @apply line-through;
+}
