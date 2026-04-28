@@ -300,8 +300,10 @@ export default function Dashboard() {
             <OrderTable />
           </div>
           <div className="w-[20%]">
-            <div className="mb-3">
+            <div className="bg-white shadow-lg px-4 pb-8 rounded-lg mb-3">
+              <p className="py-4 font-bold text-[#121212]">Add Advert</p>
               <AdvertComponent />
+
             </div>
 
             <Badge content={cityPrice.length}>

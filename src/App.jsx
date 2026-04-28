@@ -20,6 +20,7 @@ import { DriverDetail } from "./components/molecule/driver/driverDetail";
 import Support from "./pages/support";
 import NotificationPage from "./pages/notification";
 import { DistributorDetail } from "./components/molecule/distributorsTable/distributorsDetail";
+import GalleryPage from "./pages/GalleryPage";
 
 function App() {
   return (
@@ -47,6 +48,7 @@ function App() {
               element={<DistributorDetail />}
             />
             <Route path="/chat/:distributorId" element={<ChatApp />} />
+             <Route path="/gallery" element={<GalleryPage />} />
           </Route>
         </Routes>
       </Router>
