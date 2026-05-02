@@ -3,7 +3,7 @@ import Cookies from "js-cookie";
 
 export const adminApi = createApi({
   reducerPath: "adminApi",
-  tagTypes: ["Admin"],
+  tagTypes: ["Admin", "Advert"],
   baseQuery: fetchBaseQuery({
     baseUrl: import.meta.env.VITE_BASE_URL,
     prepareHeaders: (headers) => {
@@ -223,6 +223,37 @@ export const adminApi = createApi({
         body: { orderID },
       }),
     }),
+
+    getAdverts: builder.query({
+      query: () => "adverts",
+      providesTags: ["Advert"]
+    }),
+
+    uploadAdvert: builder.mutation({
+      query:(data) => ({
+        url: 'adverts',
+        method: "POST",
+        body: data,
+      }),
+      invalidatesTags:["Advert"]
+    }),
+
+    editAdvert: builder.mutation({
+      query: ({ id, data}) => ({
+        url: `adverts/${id}`,
+        method: "PUT",
+        body: data
+      }),
+      invalidatesTags: ["Advert"],
+    }),
+
+    deleteAdvert: builder.mutation({
+      query: (id) => ({
+        url: `adverts/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Advert"]
+    })
   }),
 });
 
@@ -253,4 +284,8 @@ export const {
   useUpdateDistributorsMutation,
   useUpdateAssignMutation,
   useUpdateUnassignMutation,
+  useGetAdvertsQuery,
+  useUploadAdvertMutation,
+  useEditAdvertMutation,
+  useDeleteAdvertMutation,
 } = adminApi;
