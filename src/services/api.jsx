@@ -10,7 +10,6 @@ export const adminApi = createApi({
       const jwt = Cookies.get("jwt");
       if (jwt) {
         headers.set("Authorization", `Bearer ${jwt}`);
-        headers.set("Content-Type", "application/json");
       }
       return headers;
     },
