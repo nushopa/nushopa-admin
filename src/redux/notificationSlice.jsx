@@ -8,7 +8,11 @@ const notificationSlice = createSlice({
       return action.payload;
     },
     addNotification: (state, action) => {
-      state.push(action.payload);
+      // Avoid duplicate notifications by checking _id
+      const exists = state.some((n) => n._id === action.payload._id);
+      if (!exists) {
+        state.push(action.payload);
+      }
     },
   },
 });

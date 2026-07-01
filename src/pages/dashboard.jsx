@@ -68,46 +68,56 @@ export default function Dashboard() {
 
   const notifications = useSelector((state) => state.notifications);
 
+  // FIX 1: Socket listener for real-time notifications — runs once on mount
   useEffect(() => {
-    // Listen for real-time notifications
     socket.on("notification", (newNotification) => {
       dispatch(addNotification(newNotification));
     });
 
-    // Cleanup the effect
     return () => {
       socket.off("notification");
     };
   }, [dispatch]);
 
+  // FIX 2: Sync non-notification data normally
   useEffect(() => {
     if (customersData) setTotalCustomer(customersData?.totalItems);
     if (priceListData) setCityPrice(priceListData.prices);
     if (productsData) setTotalProducts(productsData.totalProducts);
     if (totalRevenueData) setTotalRevenue(totalRevenueData.totalRevenue);
     if (totalProductSoldData) setTotalProductSold(totalProductSoldData);
-    if (notificationsData) dispatch(setNotifications(notificationsData));
   }, [
     customersData,
     priceListData,
     productsData,
     totalRevenueData,
     totalProductSoldData,
-    notificationsData,
-    dispatch,
   ]);
+
+  // FIX 3: Separate effect for initial notifications fetch — runs only once
+  // New notifications are handled by the socket listener above, so we don't
+  // need to re-run this every time notificationsData changes reference.
+  useEffect(() => {
+    if (notificationsData) {
+      dispatch(setNotifications(notificationsData));
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // FIX 4: Corrected loading guard — use || (OR) not && (AND)
   if (
-    !customerLoading &&
-    !priceListLoading &&
-    !productsLoading &&
-    !totalRevenueLoading &&
-    !totalProductSoldLoading &&
+    customerLoading ||
+    priceListLoading ||
+    productsLoading ||
+    totalRevenueLoading ||
+    totalProductSoldLoading ||
     notificationsLoading
   ) {
     return <div>Loading...</div>;
   }
+
   const handleOpenCityDialog = () =>
     setOpenCityDialog((prevState) => !prevState);
+
   const handleUpdateOpen = (CityId) => {
     setSelectedCityId(CityId);
     setUpdateOpen(true);
@@ -121,7 +131,7 @@ export default function Dashboard() {
         handleOpen={() => setUpdateOpen(false)}
         CityId={selectedCityId}
       />
-      <div className="px-3 pt-6 font-medium  my-2">
+      <div className="px-3 pt-6 font-medium my-2">
         <CardDetails
           totalRevenue={totalRevenue}
           totalCustomer={totalCustomer}
@@ -136,7 +146,7 @@ export default function Dashboard() {
             <Analytics />
           </div>
           <div className="w-[30%] mt-3">
-            <Card className="w-full  mt-9 overflow-y-auto h-[20rem] rounded-md">
+            <Card className="w-full mt-9 overflow-y-auto h-[20rem] rounded-md">
               {notifications.length > 0 ? (
                 <List className="my-2 p-0">
                   {notifications
@@ -147,7 +157,6 @@ export default function Dashboard() {
                     ?.map((item, index) => {
                       const dateObject = new Date(item?.createdAt);
 
-                      // Format the date as YYYY-MM-DD
                       const formattedDate = dateObject.toLocaleDateString(
                         "en-US",
                         {
@@ -295,30 +304,26 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="w-full flex  mt-10 justify-between">
-          <div className="w-[80%] ">
+        <div className="w-full flex mt-10 justify-between">
+          <div className="w-[80%]">
             <OrderTable />
           </div>
           <div className="w-[20%]">
-            <div className="bg-white shadow-lg px-4 pb-8 rounded-lg mb-3">
-              <p className="py-4 font-bold text-[#121212]">Add Advert</p>
-              <AdvertComponent />
-
-            </div>
+            <AdvertComponent />
 
             <Badge content={cityPrice.length}>
               <Button className="bg-mainGreen" onClick={handleOpenCityDialog}>
                 Add City
               </Button>
             </Badge>
-            <Card className="w-[95%]  mt-9 overflow-y-auto p-4 h-[20rem] rounded-md">
+            <Card className="w-[95%] mt-9 overflow-y-auto p-4 h-[20rem] rounded-md">
               <List className="my-2 p-0">
                 {cityPrice
                   ?.slice()
                   .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
                   ?.map((item, index) => (
                     <div key={index}>
-                      <ListItem className="group  rounded-md py-1.5 px-1 text-sm font-normal text-green-gray-700 hover:bg-green-500 hover:text-white focus:bg-green-500 focus:text-white">
+                      <ListItem className="group rounded-md py-1.5 px-1 text-sm font-normal text-green-gray-700 hover:bg-green-500 hover:text-white focus:bg-green-500 focus:text-white">
                         <ListItemPrefix className="flex">
                           <Tooltip content="Edit city">
                             <IconButton
@@ -329,7 +334,7 @@ export default function Dashboard() {
                             </IconButton>
                           </Tooltip>
                           <Tooltip content={item?.city}>
-                            <div className=" ">
+                            <div>
                               {TruncateString({ str: item?.city, num: 15 })}
                             </div>
                           </Tooltip>

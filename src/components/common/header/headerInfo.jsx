@@ -1,7 +1,10 @@
 import { Badge, IconButton, Typography } from "@material-tailwind/react";
 import { useDispatch, useSelector } from "react-redux";
 import { socket } from "../../../services/socket";
-import { addNotification, setNotifications } from "../../../redux/notificationSlice";
+import {
+  addNotification,
+  setNotifications,
+} from "../../../redux/notificationSlice";
 import axios from "axios";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -13,6 +16,7 @@ const HeaderInfo = () => {
   const navigate = useNavigate();
   const notifications = useSelector((state) => state.notifications);
 
+  // Fetch notifications once on mount
   useEffect(() => {
     axios
       .get(`${import.meta.env.VITE_BASE_URL}notification/`)
@@ -22,24 +26,23 @@ const HeaderInfo = () => {
         }
       })
       .catch(() => {
-        toast.error("Error fetching notifications:");
+        toast.error("Error fetching notifications");
       });
+  }, [dispatch]); // ✅ runs only once
 
-    // Listen for real-time notifications
-    socket.on("notification", (newNotification) => {
+  // Register socket listener separately, also only once
+  useEffect(() => {
+    const handleNotification = (newNotification) => {
       dispatch(addNotification(newNotification));
-      if (Array.isArray(newNotification) && newNotification.length > notifications.length) {
-        const latestNotification = newNotification[newNotification.length - 1];
-        toast.info(latestNotification.title)
-      }
-
-    });
-
-    // Cleanup the effect
-    return () => {
-      socket.off("notification");
+      toast.info(newNotification?.title || "New notification");
     };
-  }, [dispatch, notifications.length]);
+
+    socket.on("notification", handleNotification);
+
+    return () => {
+      socket.off("notification", handleNotification); 
+    };
+  }, [dispatch]); 
 
   return (
     <div className="bg-white text-black shadow capitalize w-full h-[70px] flex flex-wrap md:flex-nowrap justify-between px-4 md:pl-[3rem] md:pr-[15rem] items-center">
@@ -67,7 +70,7 @@ const HeaderInfo = () => {
             </IconButton>
           </Badge>
         </div>
-        <Typography className="text-sm md:text-lg font-bold ">
+        <Typography className="text-sm md:text-lg font-bold">
           Welcome{" "}
           <span className="text-mainGreen text-wrap">
             {user.first_name + " " + user.last_name || "admin"}
