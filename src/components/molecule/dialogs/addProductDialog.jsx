@@ -13,30 +13,34 @@ import axios from "axios";
 import { TextEditorReact } from "../../editor";
 import { $generateHtmlFromNodes } from "@lexical/html";
 
+const INITIAL_FORM_DATA = {
+  productName: "",
+  productBrandName: "",
+  productAmount: 0,
+  productCostPrice: 0,
+  productImage: null,
+  productQuantity: 1,
+  altImages: [],
+};
+
 export function AddProductForm({ handleOpen, open }) {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSubcategory, setSelectedSubcategory] = useState("");
   const [selectedSubSubcategory, setSelectedSubSubcategory] = useState("");
   const [agriculturalData, setAgriculturalData] = useState([]);
-  const [formData, setFormData] = useState({
-    productName: "",
-    productBrandName: "",
-    productAmount: 0,
-    productCostPrice: 0,
-    productImage: null,
-    productQuantity: 1,
-    altImages: [],
-  });
+  const [formData, setFormData] = useState(INITIAL_FORM_DATA);
   const [addImage] = useAddImageMutation();
   const [loading, setLoading] = useState(false);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [addProduct, { isLoading }] = useAddProductMutation();
   const [content, setContent] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   let baseUrl = import.meta.env.VITE_BASE_URL;
 
   // Fetch categories and set initial values
   useEffect(() => {
-    setLoading(true);
+    setCategoriesLoading(true);
     axios
       .get(`${baseUrl}category/get`)
       .then((response) => {
@@ -53,7 +57,7 @@ export function AddProductForm({ handleOpen, open }) {
       .catch((error) => {
         console.error("Error fetching categories:", error);
       })
-      .finally(() => setLoading(false));
+      .finally(() => setCategoriesLoading(false));
   }, [baseUrl]);
 
   // Memoized subcategories and sub-subcategories based on selection
@@ -91,7 +95,8 @@ export function AddProductForm({ handleOpen, open }) {
       const html = $generateHtmlFromNodes(editor);
       setContent(html);
     });
-  }
+  };
+
   const handleChange = (e) => {
     const { name, value, files } = e.target;
 
@@ -116,7 +121,7 @@ export function AddProductForm({ handleOpen, open }) {
         setFormData((prevFormData) => ({
           ...prevFormData,
           [name]: value,
-          productAmount: sellingPrice.toFixed(2),
+          productAmount: isNaN(sellingPrice) ? "" : sellingPrice.toFixed(2),
         }));
       } else {
         setFormData((prevFormData) => ({
@@ -127,56 +132,94 @@ export function AddProductForm({ handleOpen, open }) {
     }
   };
 
+  const resetForm = () => {
+    setFormData(INITIAL_FORM_DATA);
+    setContent("");
+    setSelectedSubcategory("");
+    setSelectedSubSubcategory("");
+    setErrorMessage("");
+  };
+
   const handleSubmit = async () => {
+    setErrorMessage("");
     setLoading(true);
+
     try {
-      if (
-        parseFloat(formData.productAmount) <=
-        parseFloat(formData.productCostPrice)
-      ) {
-        alert("Product amount must be greater than product cost price");
+      const costPrice = parseFloat(formData.productCostPrice);
+      const sellingPrice = parseFloat(formData.productAmount);
+
+      if (isNaN(costPrice) || isNaN(sellingPrice)) {
+        setErrorMessage("Please enter a valid cost price and product amount.");
         setLoading(false);
         return;
       }
-      if (formData.productImage) {
-        const mainImageResponse = await addImage(formData.productImage);
-        const mainImageUrl = mainImageResponse.data.secure_url;
-        const costPrice = parseFloat(formData.productCostPrice);
-        const sellingPrice = costPrice * 1.15;
-        if (mainImageUrl) {
-          const altImageUrls = await Promise.all(
-            formData.altImages.map(async (altImage) => {
-              const altImageResponse = await addImage(altImage);
-              return altImageResponse.data.secure_url;
-            })
-          );
 
-          const postDataInfo = {
-            product_name: formData.productName,
-            product_brand_name: formData.productBrandName,
-            product_image: mainImageUrl,
-            product_total: parseInt(formData.productQuantity, 10),
-            product_cat: selectedCategory,
-            product_sub_cat: selectedSubcategory,
-            product_sub_sub_cat: selectedSubSubcategory,
-            alt_image: altImageUrls,
-            product_des: content,
-            product_price: parseInt(sellingPrice),
-            product_cost_price: costPrice,
-            product_rate: 5,
-          };
-
-          await addProduct(postDataInfo).unwrap();
-          window.location.reload();
-          handleOpen(false);
-        }
-      } else {
-        console.error("Please select a main image");
+      if (sellingPrice <= costPrice) {
+        setErrorMessage("Product amount must be greater than product cost price.");
+        setLoading(false);
+        return;
       }
+
+      if (!formData.productName || !formData.productBrandName) {
+        setErrorMessage("Please provide a product name and brand name.");
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.productImage) {
+        setErrorMessage("Please select a main image.");
+        setLoading(false);
+        return;
+      }
+
+      // Upload the main image first.
+      const mainImageResponse = await addImage(formData.productImage);
+      const mainImageUrl = mainImageResponse?.data?.secure_url;
+
+      if (!mainImageUrl) {
+        setErrorMessage("Main image upload failed. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      // Upload any provided alt images, skipping empty slots.
+      const altImageUrls = await Promise.all(
+        formData.altImages
+          .filter(Boolean)
+          .map(async (altImage) => {
+            const altImageResponse = await addImage(altImage);
+            return altImageResponse?.data?.secure_url;
+          })
+      );
+
+      const postDataInfo = {
+        product_name: formData.productName,
+        product_brand_name: formData.productBrandName,
+        product_image: mainImageUrl,
+        product_total: parseInt(formData.productQuantity, 10),
+        product_cat: selectedCategory,
+        product_sub_cat: selectedSubcategory,
+        product_sub_sub_cat: selectedSubSubcategory,
+        alt_image: altImageUrls.filter(Boolean),
+        product_des: content,
+        product_price: parseInt(sellingPrice, 10),
+        product_cost_price: costPrice,
+        product_rate: 5,
+      };
+
+      await addProduct(postDataInfo).unwrap();
+
+      // Reset local state and close + refetch instead of a full page
+      // reload, which used to reset pagination/search and reload the
+      // entire app.
+      resetForm();
+      handleOpen(true);
     } catch (error) {
       console.error("Error submitting product:", error);
+      setErrorMessage("Failed to add product. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -184,7 +227,7 @@ export function AddProductForm({ handleOpen, open }) {
       <Dialog
         size="lg"
         open={open}
-        handler={handleOpen}
+        handler={() => handleOpen(false)}
         className="bg-transparent shadow-none "
       >
         <Card className="mx-auto w-full max-w-full">
@@ -192,6 +235,13 @@ export function AddProductForm({ handleOpen, open }) {
             <Typography variant="h4" color="blue-gray">
               Add Product
             </Typography>
+
+            {errorMessage && (
+              <Typography variant="small" color="red">
+                {errorMessage}
+              </Typography>
+            )}
+
             <div className="-mb-2 flex gap-3 w-full">
               <div className="w-1/2">
                 <Typography variant="h6">Product Name</Typography>
@@ -287,7 +337,7 @@ export function AddProductForm({ handleOpen, open }) {
               {/* Category Dropdown */}
               <div className="w-1/3">
                 <Typography variant="h6">Add Category</Typography>
-                {loading ? (
+                {categoriesLoading ? (
                   <Typography>Loading categories...</Typography>
                 ) : (
                   <select

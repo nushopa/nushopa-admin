@@ -33,13 +33,18 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
   const [addImage] = useAddImageMutation();
   const [updateProduct, { isLoading }] = useUpdateProductMutation();
   const [content, setContent] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  // Track a local preview URL so the user gets visual confirmation their
+  // new image was picked (helps diagnose "did my picture actually change" issues).
+  const [imagePreview, setImagePreview] = useState(null);
 
   const handleEditorChange = (editorState, editor) => {
     editorState.read(() => {
       const html = $generateHtmlFromNodes(editor);
       setContent(html);
     });
-  }
+  };
+
   let baseUrl = import.meta.env.VITE_BASE_URL;
 
   useEffect(() => {
@@ -52,8 +57,7 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
       })
       .catch((error) => {
         console.error("Error fetching product", error);
-      })
-
+      });
   }, [baseUrl]);
 
   useEffect(() => {
@@ -76,6 +80,8 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
               altImages: [],
               productImage: null,
             });
+            setImagePreview(null);
+            setErrorMessage("");
           }
         })
         .catch((error) => {
@@ -88,10 +94,12 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
     const { name, value, files } = e.target;
 
     if (name === "productImage") {
+      const file = files[0] || null;
       setFormData((prevFormData) => ({
         ...prevFormData,
-        [name]: files[0] || null, // Use null if no file is selected
+        [name]: file,
       }));
+      setImagePreview(file ? URL.createObjectURL(file) : null);
     } else if (name.startsWith("altImage")) {
       const altImageIndex = parseInt(name.replace("altImage", ""), 10) - 1;
       const altImagesCopy = [...formData.altImages];
@@ -125,17 +133,24 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
   };
 
   const handleSubmit = async () => {
+    setErrorMessage("");
     try {
       let mainImageUrl = null;
       let altImageUrls = [];
 
-      // Check if an image is selected
+      // Upload the replacement main image, if one was chosen. This is the
+      // step that previously silently failed to reflect in the update —
+      // if the upload succeeded but returned no secure_url, the code
+      // would fall through and never set product_image, so the old image
+      // stayed in place with no error shown to the user.
       if (formData.productImage) {
-        // Upload the main image to Cloudinary
         const mainImageResponse = await addImage(formData.productImage);
+        mainImageUrl = mainImageResponse?.data?.secure_url;
 
-        // The response will contain the URL of the uploaded main image
-        mainImageUrl = mainImageResponse.data.secure_url;
+        if (!mainImageUrl) {
+          setErrorMessage("Main image upload failed. Please try again.");
+          return;
+        }
       }
 
       // Upload alt images to Cloudinary if they are selected
@@ -144,7 +159,7 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
           formData.altImages.map(async (altImage) => {
             if (altImage) {
               const altImageResponse = await addImage(altImage);
-              return altImageResponse.data.secure_url;
+              return altImageResponse?.data?.secure_url;
             }
             return null;
           })
@@ -164,11 +179,14 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
         updateDataInfo.product_brand_name = formData.productBrandName;
       }
 
+      // Use the freshly uploaded image URL. This is set from the
+      // addImage() call above, so it always reflects the newly chosen
+      // file rather than a stale/undefined reference.
       if (mainImageUrl) {
         updateDataInfo.product_image = mainImageUrl;
       }
 
-      if (formData.productQuantity) {
+      if (formData.productQuantity !== "" && formData.productQuantity !== null && formData.productQuantity !== undefined) {
         updateDataInfo.product_total = parseInt(formData.productQuantity, 10);
       }
 
@@ -184,32 +202,35 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
         updateDataInfo.product_sub_sub_cat = selectedSubSubcategory;
       }
 
-      if (altImageUrls.length > 0) {
-        updateDataInfo.alt_image = altImageUrls.filter((url) => url !== null); // Remove null values
+      const filteredAltUrls = altImageUrls.filter((url) => url !== null);
+      if (filteredAltUrls.length > 0) {
+        updateDataInfo.alt_image = filteredAltUrls;
       }
 
       if (content) {
         updateDataInfo.product_des = content;
       }
 
-      if (formData.productAmount) {
+      if (formData.productAmount !== "" && formData.productAmount !== null && formData.productAmount !== undefined) {
         updateDataInfo.product_price = parseFloat(formData.productAmount);
       }
-      if (formData.productCostPrice) {
-        updateDataInfo.product_cost_price = parseFloat(
-          formData.productCostPrice
-        );
+      if (formData.productCostPrice !== "" && formData.productCostPrice !== null && formData.productCostPrice !== undefined) {
+        updateDataInfo.product_cost_price = parseFloat(formData.productCostPrice);
       }
 
       updateDataInfo.product_rate = 5;
+
       // Update the product
       await updateProduct(updateDataInfo).unwrap();
 
-      window.location.reload();
-
-      handleOpen(false);
+      // Close the dialog and tell the parent to refetch the current page
+      // in place, instead of doing a full window.location.reload(),
+      // which used to reset pagination and search state back to page 1.
+      setImagePreview(null);
+      handleOpen(true);
     } catch (error) {
       console.error("Error submitting product:", error);
+      setErrorMessage("Failed to update product. Please try again.");
     }
   };
 
@@ -218,7 +239,7 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
       <Dialog
         size="lg"
         open={open}
-        handler={handleOpen}
+        handler={() => handleOpen(false)}
         className="bg-transparent shadow-none"
       >
         <Card className="mx-auto w-full max-w-full">
@@ -226,6 +247,13 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
             <Typography variant="h4" color="blue-gray">
               Update Product
             </Typography>
+
+            {errorMessage && (
+              <Typography variant="small" color="red">
+                {errorMessage}
+              </Typography>
+            )}
+
             <div className="-mb-2 flex gap-3 w-full">
               <div className="w-1/2">
                 <Typography variant="h6">Product Name</Typography>
@@ -317,6 +345,13 @@ export function UpdateProductForm({ handleOpen, open, productId }) {
                 name="productImage"
                 onChange={handleChange}
               />
+              {imagePreview && (
+                <img
+                  src={imagePreview}
+                  alt="New product preview"
+                  className="mt-2 h-24 w-24 object-cover rounded-lg border border-gray-300"
+                />
+              )}
             </div>
             <div className="my-2 flex gap-3 w-full">
               <div className="w-full md:w-1/3">

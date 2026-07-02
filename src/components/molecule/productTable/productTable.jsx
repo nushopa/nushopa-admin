@@ -68,12 +68,33 @@ export function ProductTable() {
     setCurrentPage(1);
   }, [searchField]);
 
-  const handleOpen = () => setOpen((cur) => !cur);
+  // handleOpen now accepts an optional `shouldRefetch` flag. When a
+  // dialog closes after a successful add, we refetch the current page's
+  // data in place instead of doing a full window.location.reload(),
+  // which used to blow away pagination/search state and jump the user
+  // back to page 1.
+  const handleOpen = (shouldRefetch) => {
+    setOpen((cur) => !cur);
+    if (shouldRefetch) refetch();
+  };
+
   const handleUpdateOpen = (productId) => {
     setSelectedProductId(productId);
     setUpdateOpen(true);
   };
+
+  const handleUpdateClose = (shouldRefetch) => {
+    setUpdateOpen(false);
+    setSelectedProductId(null);
+    if (shouldRefetch) refetch();
+  };
+
   const handlePageChange = (pageNumber) => setCurrentPage(pageNumber);
+
+  const handleDeleteAndRefetch = async (productId) => {
+    await handleDelete(productId);
+    refetch();
+  };
 
   const visibleDetails = isSearching
     ? filteredDetails.slice(
@@ -102,7 +123,7 @@ export function ProductTable() {
             />
           </div>
           <div className="flex w-full shrink-0 gap-2 md:w-max">
-            <Button onClick={handleOpen} className="flex items-center gap-3 capitalize bg-mainGreen" size="lg">
+            <Button onClick={() => handleOpen(false)} className="flex items-center gap-3 capitalize bg-mainGreen" size="lg">
               <PlusIcon className="h-4 w-4" /> Add product
             </Button>
           </div>
@@ -113,14 +134,14 @@ export function ProductTable() {
         <ProductTableList
           loading={loading}
           products={visibleDetails}
-          onDelete={handleDelete}
+          onDelete={handleDeleteAndRefetch}
           onEdit={handleUpdateOpen}
         />
       </CardBody>
 
       <Pagination currentPage={currentPage} totalItems={totalPages} onPageChange={handlePageChange} />
       <AddProductForm open={open} handleOpen={handleOpen} />
-      <UpdateProductForm open={updateOpen} handleOpen={() => setUpdateOpen(false)} productId={selectedProductId} />
+      <UpdateProductForm open={updateOpen} handleOpen={handleUpdateClose} productId={selectedProductId} />
     </Card>
   );
 }
