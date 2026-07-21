@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardHeader, Button, CardBody, Input } from "@material-tailwind/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { PlusIcon } from "@heroicons/react/24/solid";
-import { useDeleteProductMutation } from "../../../services/api";
+import { useDeleteProductMutation, useToggleProductStockMutation } from "../../../services/api";
 import { AddProductForm } from "../dialogs/addProductDialog";
 import { UpdateProductForm } from "../dialogs/updateProductDialog";
 import Pagination from "../pagination/pagination";
@@ -27,6 +27,7 @@ export function ProductTable() {
   const [serverTotalPages, setServerTotalPages] = useState(1);
 
   const [deleteProductMutation] = useDeleteProductMutation();
+  const [toggleProductStock] = useToggleProductStockMutation();
   const { handleDelete } = useDeleteHandler(deleteProductMutation);
 
   const { data: productData, loading, refetch } = phantomGet({
@@ -62,17 +63,10 @@ export function ProductTable() {
     setFilteredDetails(filtered);
   }, [searchField, details]);
 
-  // Whenever the search term changes, go back to page 1 so pagination
-  // reflects the new (smaller) result set correctly.
   useEffect(() => {
     setCurrentPage(1);
   }, [searchField]);
 
-  // handleOpen now accepts an optional `shouldRefetch` flag. When a
-  // dialog closes after a successful add, we refetch the current page's
-  // data in place instead of doing a full window.location.reload(),
-  // which used to blow away pagination/search state and jump the user
-  // back to page 1.
   const handleOpen = (shouldRefetch) => {
     setOpen((cur) => !cur);
     if (shouldRefetch) refetch();
@@ -107,6 +101,15 @@ export function ProductTable() {
     ? Math.max(1, Math.ceil(filteredDetails.length / ITEMS_PER_PAGE))
     : serverTotalPages;
 
+    const handleToggleStock = async (productId, out_of_stock) => {
+    try {
+      await toggleProductStock({ id: productId, out_of_stock }).unwrap();
+      refetch();
+    } catch (error) {
+      console.error("Failed to toggle stock status:", error);
+    }
+  };
+
   return (
     <Card className="h-full w-[96%] mx-auto">
       <CardHeader floated={false} shadow={false} className="rounded-none">
@@ -136,6 +139,7 @@ export function ProductTable() {
           products={visibleDetails}
           onDelete={handleDeleteAndRefetch}
           onEdit={handleUpdateOpen}
+          onToggleStock={handleToggleStock}
         />
       </CardBody>
 

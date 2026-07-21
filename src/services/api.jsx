@@ -27,7 +27,7 @@ export const adminApi = createApi({
       query: (productCat) => `product?product_cat=${productCat}`,
     }),
 
-    
+
     //get product
     getProduct: builder.query({
       query: () => "product",
@@ -159,6 +159,15 @@ export const adminApi = createApi({
       }),
     }),
 
+    // toggle a product's out-of-stock status
+    toggleProductStock: builder.mutation({
+      query: ({ id, out_of_stock }) => ({
+        url: "product/toggle-stock",
+        method: "PATCH",
+        body: { id, out_of_stock },
+      }),
+    }),
+
     // update market
     updateMarket: builder.mutation({
       query: (data) => ({
@@ -262,6 +271,7 @@ export const {
   useSingleCustomerQuery,
   useGetOrdersQuery,
   useUpdateProductMutation,
+  useToggleProductStockMutation,
   useDeleteCustomerMutation,
   useSingleProductQuery,
   useRelatedProductsQuery,

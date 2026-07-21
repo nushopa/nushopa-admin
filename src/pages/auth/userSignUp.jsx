@@ -86,10 +86,6 @@ const UserSignUp = () => {
       phone_number: formData.phoneNumber,
       role: ADMIN_ROLE,
     };
-
-    console.log("====== SIGNUP SUBMIT DEBUG ======");
-    console.log("Posting signup data:", postDataInfo);
-    console.log("=================================");
  // Check if there are any validation errors before submitting the form
     if (passwordError || isLoading) {
       return;
