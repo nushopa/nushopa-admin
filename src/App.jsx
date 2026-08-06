@@ -48,7 +48,7 @@ function App() {
               element={<DistributorDetail />}
             />
             <Route path="/chat/:distributorId" element={<ChatApp />} />
-             <Route path="/gallery" element={<GalleryPage />} />
+            <Route path="/gallery" element={<GalleryPage />} />
           </Route>
         </Routes>
       </Router>

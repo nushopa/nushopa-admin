@@ -1,16 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import AuthLayout from "../../layouts/authLayout";
 import { useLoginAdminMutation } from "../../services/api";
 import { addUser } from "../../redux/user";
 import { useDispatch } from "react-redux";
 import { toast } from "react-toastify";
-import {
-  auth,
-  signInWithPopup,
-  provider,
-} from "../../lib/firebase/firebase.config";
 import Cookies from "js-cookie";
+import Auth from "../../../../nushopa/src/pages/auth/component/Auths";
 
 const UserSignIn = () => {
   const [formData, setFormData] = useState({
@@ -40,51 +35,7 @@ const UserSignIn = () => {
       }
     }
   };
-  const handleGoogleLogin = () => {
-    signInWithPopup(auth, provider)
-      .then((result) => {
-        const user = result.user;
-        if (user.email && user.uid) {
-          if (user.phoneNumber === null || user.phoneNumber === undefined) {
-            const postDataInfo = {
-              email: user.email,
-              password: user.uid,
-            };
-            localStorage.setItem("profile-picture", user.photoURL);
-            try {
-              loginUser(postDataInfo)
-                .then((res) => {
-                  const { token } = res.data;
-
-                  // Store token in cookies
-                  Cookies.set("jwt", token, {
-                    expires: 7, // Cookie expiration in days
-                    secure: true, // Ensures HTTPS
-                    sameSite: "Strict", // Prevent CSRF
-                  });
-
-                  if (res.data.user.role === 5000) {
-                    localStorage.setItem("userId", res.data.user._id);
-                    dispatch(addUser(res.data.user));
-                    toast.success("logged in successfully");
-                    navigate("/");
-                  } else {
-                    toast.error("Invalid Email or password");
-                    return;
-                  }
-                })
-                .catch((error) => console.error(error));
-            } catch (e) {
-              console.error(e);
-            }
-          }
-        }
-      })
-      .catch((error) => {
-        // Handle errors
-        console.error(error);
-      });
-  };
+ 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -130,11 +81,17 @@ const UserSignIn = () => {
   };
 
   return (
-    <AuthLayout>
-      <h2 className="text-2xl font-semibold text-center font-workSans mb-4">
-        Nushopa Admin Sign In
+    <Auth
+          title="Experience the the modern way to shop"
+          subtitle="Please provide your information to continue shopping with Us."
+          buttonText="Login"
+          buttonPath="/sign-in"
+          formSide="center"
+        >
+      <h2 className="text-2xl font-semibold text-start font-workSans mb-4">
+        Admin Sign In
       </h2>
-      <form className="bg-white rounded-lg p-8" onSubmit={handleSubmit}>
+      <form  onSubmit={handleSubmit}>
         <div className=" gap-4 md:gap-5 pt-2">
           <div className="w-full">
             <label
@@ -176,11 +133,7 @@ const UserSignIn = () => {
           </div>
         </div>
 
-        <div className="font-workSans font-normal text-[16px] py-3 w-full">
-          <a href="#" className="text-mainGreen">
-            Forgot Password?
-          </a>
-        </div>
+        
         <button
           type="submit"
           className="bg-mainGreen w-full text-center text-white py-3 px-5 rounded-md hover:bg-green-600 mt-4"
@@ -188,51 +141,9 @@ const UserSignIn = () => {
         >
           {isLoading ? "Signing in..." : "Sign In"}
         </button>
-        <div className="relative flex w-[90%] mx-auto flex-row py-6 ">
-          <div className=" w-full inline-flex items-center text-xs align-middle">
-            <div className="ms-2 w-full h-px flex-1 bg-gray-200 group-last:hidden dark:bg-gray-700"></div>
-          </div>
-
-          <div className="shrink px-3 basis-0 flex-1 group">
-            <span className="w-7 h-7 flex justify-center items-center font-medium text-gray-800 rounded-full">
-              or
-            </span>
-          </div>
-
-          <div className=" w-full inline-flex items-center text-xs align-middle">
-            <div className=" w-full h-px flex-1 bg-gray-200 group-last:hidden dark:bg-gray-700"></div>
-          </div>
-        </div>
-        <div className=" flex w-full justify-center gap-3 items-center flex-row  ">
-          <div onClick={handleGoogleLogin}>
-            <img
-              className=" w-[3rem]"
-              src="https://res.cloudinary.com/phantom1245/image/upload/v1702037705/farm2home/Frame_268_fpbpmd.png"
-              alt=""
-            />
-          </div>
-          <div>
-            <a href="#">
-              <img
-                className=" w-[3rem]"
-                src="https://res.cloudinary.com/phantom1245/image/upload/v1702037689/farm2home/Frame_267_queazd.png"
-                alt=""
-              />
-            </a>
-          </div>
-        </div>
-        <div className="w-full py-4">
-          <div className="text-center text-[#000] font-workSans font-normal text-[16px] py-3 w-full">
-            Don’t have an account?{" "}
-            <span>
-              <a href="/sign-up" className="text-mainGreen">
-                Create Account
-              </a>
-            </span>
-          </div>
-        </div>
+       
       </form>
-    </AuthLayout>
+    </Auth>
   );
 };
 

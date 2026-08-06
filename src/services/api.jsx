@@ -121,6 +121,14 @@ export const adminApi = createApi({
       }),
     }),
 
+    // patchdistributor status
+    patchDistributorStatus: builder.mutation({
+      query: (id) => ({
+        url: `customers/distributors/${id}/status`,
+        method: "PATCH",
+      }),
+    }),
+
 
     // delete product
     deleteMarket: builder.mutation({
@@ -297,4 +305,5 @@ export const {
   useUploadAdvertMutation,
   useEditAdvertMutation,
   useDeleteAdvertMutation,
+  usepatchDistributorStatus,
 } = adminApi;

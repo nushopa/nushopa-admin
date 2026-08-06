@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { phantomGet, phantomPost } from "phantom-request";
+import { phantomGet, phantomPost, phantomPatch } from "phantom-request";
 import { Loader } from "../../common/loaders";
 import DefaultLayout from "../../../layouts/defaultLayout";
 import { toast } from "react-toastify";
@@ -17,10 +17,11 @@ import { AssignUnassignButton } from "../../assignButton/AssignUnassignButton";
 export function DistributorDetail() {
   const { distributorId } = useParams();
   const navigate = useNavigate();
-  const jwt = Cookies.get("jwt"); // ✅ FIX 1: get token
+  const jwt = Cookies.get("jwt");
 
   const [distributor, setDistributor] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [isAssigned, setIsAssigned] = useState(false);
   const [linkedOrderId, setLinkedOrderId] = useState(null);
 
@@ -48,6 +49,7 @@ export function DistributorDetail() {
     error: assignError,
   } = phantomPost({
     route: "order/assign",
+    token: jwt,
   });
 
   const {
@@ -56,21 +58,56 @@ export function DistributorDetail() {
     error: unassignError,
   } = phantomPost({
     route: "order/unassign",
+    token: jwt,
   });
+
+  // ✅ FIX 1: this endpoint updates distributor status and must be a PATCH,
+  // not a POST. Also corrected the destructure key ("patch", not "post")
+  // and added the auth token, matching the other requests in this file.
+  const {
+    patch: postUpdateStatus,
+    response: updateStatusResponse,
+    error: updateStatusError,
+  } = phantomPatch({
+    route: `customers/distributors/${distributorId}/status`,
+    token: jwt,
+  });
+
+  useEffect(() => {
+    if (updateStatusResponse?.distributor) {
+      setDistributor((prev) =>
+        prev ? { ...prev, status: updateStatusResponse.distributor.status } : prev
+      );
+
+      toast.success(
+        updateStatusResponse.distributor.status === "approved"
+          ? "Distributor approved. A confirmation email has been sent."
+          : "Distributor rejected. A notification email has been sent."
+      );
+
+      setIsReviewModalOpen(false);
+    }
+
+    if (updateStatusError) {
+      toast.error(
+        updateStatusError.response?.data?.message ||
+          "Failed to update distributor status."
+      );
+    }
+  }, [updateStatusResponse, updateStatusError]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ✅ FIX 3: handle all possible response shapes from the API
   useEffect(() => {
     if (distributorData) {
       const resolved =
-        distributorData.distributor ||   // { distributor: {...} }
-        distributorData.data ||           // { data: {...} }
-        distributorData.customer ||       // { customer: {...} }
+        distributorData.distributor || // { distributor: {...} }
+        distributorData.data || // { data: {...} }
+        distributorData.customer || // { customer: {...} }
         (distributorData._id ? distributorData : null); // root object IS the distributor
 
       if (resolved) {
         setDistributor(resolved);
       } else {
-        // Log for debugging if none of the known shapes match
         console.warn("Unexpected distributorData shape:", distributorData);
         toast.error("Unexpected response format from server.");
       }
@@ -135,6 +172,14 @@ export function DistributorDetail() {
     navigate("/distributors");
   };
 
+  const handleApprove = () => {
+    postUpdateStatus({ status: "approved" });
+  };
+
+  const handleReject = () => {
+    postUpdateStatus({ status: "rejected" });
+  };
+
   // ✅ FIX 4: show error state instead of infinite loader when fetch fails
   if (fetchError) {
     return (
@@ -162,7 +207,6 @@ export function DistributorDetail() {
     <DefaultLayout>
       <div className="py-8 bg-gray-100 min-h-screen">
         <div className="max-w-6xl mx-auto bg-white rounded-xl shadow-lg overflow-hidden">
-
           {/* Header */}
           <div className="p-8 border-b flex items-start justify-between">
             <div>
@@ -320,6 +364,11 @@ export function DistributorDetail() {
 
           {/* Action Buttons */}
           <div className="px-8 pb-8 flex justify-end gap-4">
+            {distributor.status !== "approved" && (
+              <Button color="green" onClick={() => setIsReviewModalOpen(true)}>
+                Review & Approve
+              </Button>
+            )}
             <Button color="red" onClick={() => setIsDeleteModalOpen(true)}>
               Delete Distributor
             </Button>
@@ -348,6 +397,63 @@ export function DistributorDetail() {
             </Button>
             <Button color="red" onClick={handleDelete}>
               Yes, Delete
+            </Button>
+          </DialogFooter>
+        </Dialog>
+
+        {/* Review / Approval Dialog */}
+        <Dialog
+          open={isReviewModalOpen}
+          handler={() => setIsReviewModalOpen(false)}
+          size="sm"
+        >
+          <DialogHeader>Review Distributor</DialogHeader>
+          <DialogBody>
+            <p className="text-gray-700 mb-3">
+              Please confirm that the submitted ID and distributor information
+              is correct and this account is ready for approval.
+            </p>
+            <ul className="text-sm text-gray-600 list-disc list-inside space-y-1">
+              <li>
+                Name:{" "}
+                <span className="font-semibold">
+                  {distributor.first_name} {distributor.last_name}
+                </span>
+              </li>
+              <li>
+                ID Type:{" "}
+                <span className="font-semibold">
+                  {distributor.id_type || "Not provided"}
+                </span>
+              </li>
+              <li>
+                Address:{" "}
+                <span className="font-semibold">
+                  {distributor.address || "Not provided"}
+                </span>
+              </li>
+            </ul>
+            {distributor.proof_Of_Identity && (
+              <img
+                src={distributor.proof_Of_Identity}
+                alt="Proof of Identity"
+                className="mt-4 max-h-48 rounded-md border border-gray-300 object-contain"
+              />
+            )}
+          </DialogBody>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="text"
+              color="blue-gray"
+              onClick={() => setIsReviewModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button color="red" onClick={handleReject}>
+              Reject
+            </Button>
+            <Button color="green" onClick={handleApprove}>
+              Approve
             </Button>
           </DialogFooter>
         </Dialog>
