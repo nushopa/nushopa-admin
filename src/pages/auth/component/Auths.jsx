@@ -1,16 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { HiArrowRight } from 'react-icons/hi2';
-import IMG from '@/assets/logo.png';
+import IMG from '../../../assets/logo.png';
 import './Auths.css';
 
-interface Particle {
-  w: number;
-  l: string;
-  d: string;
-  dur: string;
-}
-
-const PARTICLES: Particle[] = [
+const PARTICLES = [
   { w: 8,  l: '8%',  d: '0s',   dur: '14s' },
   { w: 5,  l: '18%', d: '3s',   dur: '19s' },
   { w: 11, l: '32%', d: '1.5s', dur: '12s' },
@@ -20,18 +13,7 @@ const PARTICLES: Particle[] = [
   { w: 5,  l: '91%', d: '4s',   dur: '20s' },
 ];
 
-type FormSide = 'left' | 'right' | 'center';
-
-interface AuthProps {
-  title?: string;
-  subtitle?: string;
-  children: React.ReactNode;
-  buttonText: string;
-  buttonPath: string;
-  formSide?: FormSide;
-}
-
-const Auth: React.FC<AuthProps> = ({
+const Auth = ({
   title,
   subtitle,
   children,
@@ -105,7 +87,7 @@ const Auth: React.FC<AuthProps> = ({
               <div className={`deco-ring ${formOnLeft ? 'deco-ring-left' : 'deco-ring-right'}`} />
               <h1 className="panel-title">{title}</h1>
               <p className="panel-subtitle">{subtitle}</p>
-              <button className="flex items-center gap-4 bg-white p-2 rounded-lg" onClick={() => navigate(buttonPath)}>
+              <button className="panel-btn" onClick={() => navigate(buttonPath)}>
                 {buttonText}
                 <HiArrowRight size={14} />
               </button>

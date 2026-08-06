@@ -5,7 +5,7 @@ import { addUser } from "../../redux/user";
 import { useDispatch } from "react-redux";
 import { toast } from "react-toastify";
 import Cookies from "js-cookie";
-import Auth from "../../../../nushopa/src/pages/auth/component/Auths";
+import Auth from "./component/Auths";
 
 const UserSignIn = () => {
   const [formData, setFormData] = useState({
