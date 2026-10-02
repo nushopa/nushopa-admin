@@ -21,11 +21,13 @@ import Support from "./pages/support";
 import NotificationPage from "./pages/notification";
 import { DistributorDetail } from "./components/molecule/distributorsTable/distributorsDetail";
 import GalleryPage from "./pages/GalleryPage";
+import ErrorBoundary from "./components/common/ErrorBoundary";
 
 function App() {
   return (
     <>
       <Router>
+        <ErrorBoundary>
         <Routes>
           <Route path="/sign-in" element={<UserSignIn />} />
           <Route path="/sign-up" element={<UserSignUp />} />
@@ -51,6 +53,7 @@ function App() {
             <Route path="/gallery" element={<GalleryPage />} />
           </Route>
         </Routes>
+        </ErrorBoundary>
       </Router>
       <ToastContainer
         position="top-right"

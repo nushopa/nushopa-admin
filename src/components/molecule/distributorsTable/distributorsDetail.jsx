@@ -1,10 +1,8 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { phantomGet, phantomPost, phantomPatch } from "phantom-request";
 import { Loader } from "../../common/loaders";
 import DefaultLayout from "../../../layouts/defaultLayout";
 import { toast } from "react-toastify";
-import Cookies from "js-cookie";
 import {
   Dialog,
   DialogHeader,
@@ -13,175 +11,116 @@ import {
   Button,
 } from "@material-tailwind/react";
 import { AssignUnassignButton } from "../../assignButton/AssignUnassignButton";
+import {
+  useDeleteDistributorMutation,
+  useGetDistributorAssignmentQuery,
+  useGetDistributorQuery,
+  usePatchDistributorStatusMutation,
+  useUpdateAssignMutation,
+  useUpdateUnassignMutation,
+} from "../../../services/api";
+
+const STATUS_LABEL = {
+  approved: "Approved",
+  pending: "Pending",
+  rejected: "Rejected",
+};
 
 export function DistributorDetail() {
   const { distributorId } = useParams();
   const navigate = useNavigate();
-  const jwt = Cookies.get("jwt");
 
-  const [distributor, setDistributor] = useState(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-  const [isAssigned, setIsAssigned] = useState(false);
-  const [linkedOrderId, setLinkedOrderId] = useState(null);
 
-  // ✅ FIX 2: pass token so API call doesn't return 401
   const {
     data: distributorData,
-    loading,
+    isLoading,
+    isError,
     error: fetchError,
-  } = phantomGet({
-    route: `customers/distributors/${distributorId}`,
-    token: jwt,
-    fetchOnMount: true,
-  });
+  } = useGetDistributorQuery(distributorId);
 
-  // ✅ FIX 2: pass token for assignment status fetch too
-  const { data: assignmentData } = phantomGet({
-    route: `order/assigned-distributor/${distributorId}`,
-    token: jwt,
-    fetchOnMount: true,
-  });
+  // Which order (if any) this distributor is linked to.
+  // A 404 here simply means "not assigned", so errors are ignored.
+  const { data: assignmentData } =
+    useGetDistributorAssignmentQuery(distributorId);
 
-  const {
-    post: postAssign,
-    response: assignResponse,
-    error: assignError,
-  } = phantomPost({
-    route: "order/assign",
-    token: jwt,
-  });
+  const [updateAssign] = useUpdateAssignMutation();
+  const [updateUnassign] = useUpdateUnassignMutation();
+  const [patchStatus, { isLoading: updatingStatus }] =
+    usePatchDistributorStatusMutation();
+  const [deleteDistributor, { isLoading: deleting }] =
+    useDeleteDistributorMutation();
 
-  const {
-    post: postUnassign,
-    response: unassignResponse,
-    error: unassignError,
-  } = phantomPost({
-    route: "order/unassign",
-    token: jwt,
-  });
-
-  // ✅ FIX 1: this endpoint updates distributor status and must be a PATCH,
-  // not a POST. Also corrected the destructure key ("patch", not "post")
-  // and added the auth token, matching the other requests in this file.
-  const {
-    patch: postUpdateStatus,
-    response: updateStatusResponse,
-    error: updateStatusError,
-  } = phantomPatch({
-    route: `customers/distributors/${distributorId}/status`,
-    token: jwt,
-  });
-
-  useEffect(() => {
-    if (updateStatusResponse?.distributor) {
-      setDistributor((prev) =>
-        prev ? { ...prev, status: updateStatusResponse.distributor.status } : prev
-      );
-
-      toast.success(
-        updateStatusResponse.distributor.status === "approved"
-          ? "Distributor approved. A confirmation email has been sent."
-          : "Distributor rejected. A notification email has been sent."
-      );
-
-      setIsReviewModalOpen(false);
-    }
-
-    if (updateStatusError) {
-      toast.error(
-        updateStatusError.response?.data?.message ||
-          "Failed to update distributor status."
-      );
-    }
-  }, [updateStatusResponse, updateStatusError]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ✅ FIX 3: handle all possible response shapes from the API
-  useEffect(() => {
-    if (distributorData) {
-      const resolved =
-        distributorData.distributor || // { distributor: {...} }
-        distributorData.data || // { data: {...} }
-        distributorData.customer || // { customer: {...} }
-        (distributorData._id ? distributorData : null); // root object IS the distributor
-
-      if (resolved) {
-        setDistributor(resolved);
-      } else {
-        console.warn("Unexpected distributorData shape:", distributorData);
-        toast.error("Unexpected response format from server.");
-      }
-    }
+  // Handle every response shape the API might return.
+  const distributor = useMemo(() => {
+    if (!distributorData) return null;
+    return (
+      distributorData.distributor ||
+      distributorData.data ||
+      distributorData.customer ||
+      (distributorData._id ? distributorData : null)
+    );
   }, [distributorData]);
 
-  // Handle assignment status
-  useEffect(() => {
-    if (assignmentData?.order) {
-      setIsAssigned(true);
-      setLinkedOrderId(assignmentData.order.orderID || assignmentData.order._id);
-    } else {
-      setIsAssigned(false);
-      setLinkedOrderId(null);
-    }
-  }, [assignmentData]);
+  const linkedOrder = assignmentData?.order ?? null;
+  const isAssigned = Boolean(linkedOrder);
+  const linkedOrderId = linkedOrder?.orderID || linkedOrder?._id || null;
 
-  // Handle assign response
-  useEffect(() => {
-    if (assignResponse?.order) {
-      const orderID = assignResponse.order.orderID;
-      setIsAssigned(true);
-      setLinkedOrderId(orderID);
+  const handleAssign = async () => {
+    try {
+      const res = await updateAssign({ distributorID: distributorId }).unwrap();
+      const orderID = res?.order?.orderID;
       toast.success("Distributor assigned successfully!");
-      navigate(`/chat/${distributorId}?order=${orderID}`);
+      if (orderID) navigate(`/chat/${distributorId}?order=${orderID}`);
+    } catch (err) {
+      toast.error(err?.data?.message || "Failed to assign distributor.");
     }
-    if (assignError) {
-      toast.error(
-        assignError.response?.data?.message || "Failed to assign distributor."
-      );
-    }
-  }, [assignResponse, assignError]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Handle unassign response
-  useEffect(() => {
-    if (unassignResponse) {
-      toast.success("Distributor unassigned successfully.");
-      setIsAssigned(false);
-      setLinkedOrderId(null);
-    }
-    if (unassignError) {
-      toast.error(
-        unassignError.response?.data?.message || "Failed to unassign distributor."
-      );
-    }
-  }, [unassignResponse, unassignError]);
-
-  const handleAssign = () => {
-    postAssign({ distributorID: distributorId });
   };
 
-  const handleUnassign = () => {
+  const handleUnassign = async () => {
     if (!linkedOrderId) {
       toast.error("No linked order found.");
       return;
     }
-    postUnassign({ distributorID: distributorId, orderID: linkedOrderId });
+    try {
+      await updateUnassign({
+        distributorID: distributorId,
+        orderID: linkedOrderId,
+      }).unwrap();
+      toast.success("Distributor unassigned successfully.");
+    } catch (err) {
+      toast.error(err?.data?.message || "Failed to unassign distributor.");
+    }
   };
 
-  const handleDelete = () => {
-    toast.success("Distributor deleted successfully!");
-    navigate("/distributors");
+  const handleDelete = async () => {
+    try {
+      await deleteDistributor(distributorId).unwrap();
+      toast.success("Distributor deleted successfully!");
+      setIsDeleteModalOpen(false);
+      navigate("/distributors");
+    } catch (err) {
+      toast.error(err?.data?.message || "Failed to delete distributor.");
+    }
   };
 
-  const handleApprove = () => {
-    postUpdateStatus({ status: "approved" });
+  const updateStatus = async (status) => {
+    try {
+      const res = await patchStatus({ id: distributorId, status }).unwrap();
+      const newStatus = res?.distributor?.status ?? status;
+      toast.success(
+        newStatus === "approved"
+          ? "Distributor approved. A confirmation email has been sent."
+          : "Distributor rejected. A notification email has been sent."
+      );
+      setIsReviewModalOpen(false);
+    } catch (err) {
+      toast.error(err?.data?.message || "Failed to update distributor status.");
+    }
   };
 
-  const handleReject = () => {
-    postUpdateStatus({ status: "rejected" });
-  };
-
-  // ✅ FIX 4: show error state instead of infinite loader when fetch fails
-  if (fetchError) {
+  if (isError) {
     return (
       <DefaultLayout>
         <div className="flex flex-col items-center justify-center min-h-screen gap-4">
@@ -189,7 +128,7 @@ export function DistributorDetail() {
             Failed to load distributor details.
           </p>
           <p className="text-gray-500 text-sm">
-            {fetchError?.response?.data?.message ||
+            {fetchError?.data?.message ||
               "Please check your connection or try again."}
           </p>
           <Button color="green" onClick={() => navigate("/distributors")}>
@@ -200,8 +139,22 @@ export function DistributorDetail() {
     );
   }
 
-  // ✅ FIX 4: loading covers both network-in-flight AND data not yet set
-  if (loading || !distributor) return <Loader />;
+  if (isLoading) return <Loader />;
+
+  if (!distributor) {
+    return (
+      <DefaultLayout>
+        <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+          <p className="text-red-500 text-lg font-semibold">
+            Unexpected response format from server.
+          </p>
+          <Button color="green" onClick={() => navigate("/distributors")}>
+            Back to Distributors
+          </Button>
+        </div>
+      </DefaultLayout>
+    );
+  }
 
   return (
     <DefaultLayout>
@@ -230,7 +183,6 @@ export function DistributorDetail() {
 
           {/* Profile & Details */}
           <div className="p-8 grid md:grid-cols-3 gap-8">
-            {/* Profile Picture */}
             <div className="flex justify-center md:col-span-1">
               {distributor.profile_picture ? (
                 <img
@@ -245,84 +197,34 @@ export function DistributorDetail() {
               )}
             </div>
 
-            {/* Information Grid */}
             <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 text-lg">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  First Name
-                </label>
-                <p className="mt-1 font-semibold">
-                  {distributor.first_name ||
-                    distributor.firstName ||
-                    "Not provided"}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Last Name
-                </label>
-                <p className="mt-1 font-semibold">
-                  {distributor.last_name ||
-                    distributor.lastName ||
-                    "Not provided"}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Email
-                </label>
-                <p className="mt-1 font-semibold">
-                  {distributor.email || "Not provided"}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Phone Number
-                </label>
-                <p className="mt-1 font-semibold">
-                  {distributor.phone_number ||
-                    distributor.contact ||
-                    "Not provided"}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Address
-                </label>
-                <p className="mt-1 font-semibold">
-                  {distributor.address || "Not provided"}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  City
-                </label>
-                <p className="mt-1 font-semibold">
-                  {distributor.city || "Not provided"}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Date of Birth
-                </label>
-                <p className="mt-1 font-semibold">
-                  {distributor.date_of_birth
+              <Field
+                label="First Name"
+                value={distributor.first_name || distributor.firstName}
+              />
+              <Field
+                label="Last Name"
+                value={distributor.last_name || distributor.lastName}
+              />
+              <Field label="Email" value={distributor.email} />
+              <Field
+                label="Phone Number"
+                value={distributor.phone_number || distributor.contact}
+              />
+              <Field label="Address" value={distributor.address} />
+              <Field label="City" value={distributor.city} />
+              <Field
+                label="Date of Birth"
+                value={
+                  distributor.date_of_birth
                     ? new Date(distributor.date_of_birth).toLocaleDateString()
-                    : "Not provided"}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Status
-                </label>
-                <p className="mt-1 font-semibold">
-                  {distributor.status === "approved"
-                    ? "Approved"
-                    : distributor.status === "pending"
-                    ? "Pending"
-                    : "Inactive"}
-                </p>
-              </div>
+                    : null
+                }
+              />
+              <Field
+                label="Status"
+                value={STATUS_LABEL[distributor.status] || "Inactive"}
+              />
 
               {/* Proof of Identity */}
               <div className="sm:col-span-2">
@@ -336,28 +238,22 @@ export function DistributorDetail() {
                     className="max-h-64 rounded-md border border-gray-300 object-contain"
                   />
                 ) : (
-                  <p className="text-gray-500">
-                    No proof of identity uploaded
-                  </p>
+                  <p className="text-gray-500">No proof of identity uploaded</p>
                 )}
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Account Created
-                </label>
-                <p className="mt-1 font-semibold">
-                  {distributor.createdAt
-                    ? new Date(distributor.createdAt).toLocaleDateString(
-                        "en-GB",
-                        {
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        }
-                      )
-                    : "Not provided"}
-                </p>
+                <Field
+                  label="Account Created"
+                  value={
+                    distributor.createdAt
+                      ? new Date(distributor.createdAt).toLocaleDateString(
+                          "en-GB",
+                          { year: "numeric", month: "long", day: "numeric" }
+                        )
+                      : null
+                  }
+                />
               </div>
             </div>
           </div>
@@ -383,8 +279,8 @@ export function DistributorDetail() {
         >
           <DialogHeader>Confirm Deletion</DialogHeader>
           <DialogBody>
-            Are you sure you want to delete this distributor? This action
-            cannot be undone.
+            Are you sure you want to delete this distributor? This action cannot
+            be undone.
           </DialogBody>
           <DialogFooter>
             <Button
@@ -395,7 +291,7 @@ export function DistributorDetail() {
             >
               Cancel
             </Button>
-            <Button color="red" onClick={handleDelete}>
+            <Button color="red" onClick={handleDelete} disabled={deleting}>
               Yes, Delete
             </Button>
           </DialogFooter>
@@ -449,15 +345,32 @@ export function DistributorDetail() {
             >
               Cancel
             </Button>
-            <Button color="red" onClick={handleReject}>
+            <Button
+              color="red"
+              onClick={() => updateStatus("rejected")}
+              disabled={updatingStatus}
+            >
               Reject
             </Button>
-            <Button color="green" onClick={handleApprove}>
+            <Button
+              color="green"
+              onClick={() => updateStatus("approved")}
+              disabled={updatingStatus}
+            >
               Approve
             </Button>
           </DialogFooter>
         </Dialog>
       </div>
     </DefaultLayout>
+  );
+}
+
+function Field({ label, value }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <p className="mt-1 font-semibold">{value || "Not provided"}</p>
+    </div>
   );
 }

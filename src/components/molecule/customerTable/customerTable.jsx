@@ -11,97 +11,59 @@ import {
   Checkbox,
   Chip,
 } from "@material-tailwind/react";
-import { useDeleteCustomerMutation } from "../../../services/api";
+import {
+  useDeleteCustomerMutation,
+  useGetCustomerQuery,
+} from "../../../services/api";
 import Pagination from "../pagination/pagination";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import useDeleteHandler from "../../../lib/hook/useDeleteHandler";
 import { TABLE_HEAD } from "../../../data/customersTableHead";
-import { phantomGet } from "phantom-request";
-import Cookies from "js-cookie";
 import { toast } from "react-toastify";
+import { Loader } from "../../common/loaders";
 
+const EMPTY = [];
+const ITEMS_PER_PAGE = 15;
 
 export function CustomerTable() {
-  const jwt = Cookies.get("jwt");
   const [deleteCustomerMutation] = useDeleteCustomerMutation();
-  const { handleDelete } = useDeleteHandler(deleteCustomerMutation, "customer")
+  const { handleDelete } = useDeleteHandler(deleteCustomerMutation, "customer");
   const [selectedEmails, setSelectedEmails] = useState([]);
   const [searchField, setSearchField] = useState("");
-  const [details, setDetails] = useState([]);
-  const [filteredDetails, setFilteredDetails] = useState([]);
-
-  // Pagination state
-  const [totalPages, setTotalPages] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
 
-  const { data: customers, refetch } = phantomGet({
-    route: "customers",
-    token: jwt,
-    params: { page: currentPage, limit: itemsPerPage },
-    fetchOnMount: false,
+  // The auth cookie is attached automatically by the RTK Query base query.
+  const { data, isFetching } = useGetCustomerQuery({
+    page: currentPage,
+    limit: ITEMS_PER_PAGE,
   });
+  const details = data?.customers ?? EMPTY;
+  const totalPages = data?.totalPages || 1;
 
-  useEffect(() => {
-    refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
-
-  useEffect(() => {
-
-    if (customers) {
-      setDetails(customers?.customers);
-      setFilteredDetails(customers?.customers);
-      setTotalPages(customers?.totalPages || 1);
-    }
-
-  }, [customers]);
-  useEffect(() => {
-    const filteredCustomers = details.filter(
-      (customer) =>
-        customer.email
-          .toLowerCase()
-          .includes(searchField.toLowerCase()) ||
-        customer.first_name.toLowerCase().includes(searchField.toLowerCase()) ||
-        customer.last_name
-          .toLowerCase()
-          .includes(searchField.toLowerCase()) ||
-        customer.phone_number
-          .toLowerCase()
-          .includes(searchField.toLowerCase())
+  const filteredDetails = useMemo(() => {
+    const term = searchField.toLowerCase();
+    const has = (v) => String(v ?? "").toLowerCase().includes(term);
+    return details.filter(
+      (c) =>
+        has(c.email) ||
+        has(c.first_name) ||
+        has(c.last_name) ||
+        has(c.phone_number)
     );
-    setFilteredDetails(filteredCustomers);
-  }, [searchField, details]);
+  }, [details, searchField]);
 
   const handleCheckboxChange = (email) => {
-    setSelectedEmails((prevSelectedEmails) => {
-      if (prevSelectedEmails.includes(email)) {
-        // Remove the email if it's already selected
-        return prevSelectedEmails.filter(
-          (selectedEmail) => selectedEmail !== email
-        );
-      } else {
-        // Add the email if it's not selected
-        return [...prevSelectedEmails, email];
-      }
-    });
-
-
+    setSelectedEmails((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
+    );
   };
 
   const handleSendEmail = () => {
     if (selectedEmails.length > 0) {
-      // Create a mailto link with pre-filled recipients
-      const mailtoLink = `mailto:${selectedEmails.join(',')}`;
-      // Open the link in a new window or tab
-      window.open(mailtoLink, '_blank');
+      window.open(`mailto:${selectedEmails.join(",")}`, "_blank");
     } else {
       toast.error("No emails selected");
     }
-  }
-
-  const handlePageChange = (pageNumber) => {
-    setCurrentPage(pageNumber);
   };
 
   return (
@@ -113,19 +75,21 @@ export function CustomerTable() {
               type="text"
               name="search-input"
               placeholder="use email, first name, last name, phone number"
-
               label="Search"
               icon={<UserGroupIcon className="h-5 w-5" />}
               value={searchField}
               onChange={(e) => setSearchField(e.target.value)}
-
             />
           </div>
           <div className="flex w-full shrink-0 gap-2 md:w-max">
             <Button
               className="px-8 shadow-sm py-3 bg-transparent text-black rounded-[10px] border border-[#7B7B7B] justify-center items-center gap-2 inline-flex"
               size="lg"
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                setSearchField("");
+                setCurrentPage(1);
+                setSelectedEmails([]);
+              }}
             >
               All Users
             </Button>
@@ -152,10 +116,25 @@ export function CustomerTable() {
               ))}
             </tr>
           </thead>
-          {filteredDetails.length > 0 ? (
-            <tbody>
-              {filteredDetails
-                ?.slice()
+          <tbody>
+            {isFetching ? (
+              <tr>
+                <td colSpan={TABLE_HEAD.length} className="text-center py-4">
+                  <Loader />
+                </td>
+              </tr>
+            ) : filteredDetails.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={TABLE_HEAD.length}
+                  className="text-center font-roboto font-semibold py-14 text-3xl"
+                >
+                  No customer to display
+                </td>
+              </tr>
+            ) : (
+              filteredDetails
+                .slice()
                 .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
                 .map(
                   (
@@ -174,22 +153,15 @@ export function CustomerTable() {
                     const classes = isLast
                       ? "p-4"
                       : "p-4 border-b border-blue-gray-50";
-                    const dateObject = new Date(createdAt);
-
-                    // Format the date as YYYY-MM-DD
-                    const formattedDate = dateObject.toLocaleDateString(
+                    const formattedDate = new Date(createdAt).toLocaleDateString(
                       "en-US",
-                      {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                      }
+                      { year: "numeric", month: "2-digit", day: "2-digit" }
                     );
 
                     return (
                       <tr
-                        key={index}
-                        className="cursor-pointer hover:bg-greenWhite hover"
+                        key={_id ?? index}
+                        className="cursor-pointer hover:bg-greenWhite"
                       >
                         <td className={classes}>
                           <div className="flex items-center gap-3">
@@ -228,7 +200,6 @@ export function CustomerTable() {
                             {email}
                           </Typography>
                         </td>
-
                         <td className={classes}>
                           <Typography
                             variant="small"
@@ -250,7 +221,10 @@ export function CustomerTable() {
                         </td>
                         <td className={classes}>
                           <Tooltip content="Delete User">
-                            <IconButton variant="text" onClick={() => handleDelete(_id)}>
+                            <IconButton
+                              variant="text"
+                              onClick={() => handleDelete(_id)}
+                            >
                               <TrashIcon className="h-4 w-4 text-red-900" />
                             </IconButton>
                           </Tooltip>
@@ -258,16 +232,16 @@ export function CustomerTable() {
                       </tr>
                     );
                   }
-                )}
-            </tbody>
-          ) : (
-            <tbody className="py-14 flex justify-center w-full text-center items-center text-3xl">
-              <tr><td>No customer to display</td></tr>
-            </tbody>
-          )}
+                )
+            )}
+          </tbody>
         </table>
       </CardBody>
-      <Pagination currentPage={currentPage} totalItems={totalPages} onPageChange={handlePageChange} />
+      <Pagination
+        currentPage={currentPage}
+        totalItems={totalPages}
+        onPageChange={setCurrentPage}
+      />
       <div className="flex w-full mb-10 mt-5 shrink-0 gap-2 md:w-max">
         <Button
           className="px-8 shadow-sm py-3 bg-mainGreen text-white rounded-[10px] border border-[#7B7B7B] justify-center items-center gap-2 inline-flex"

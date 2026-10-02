@@ -5,10 +5,10 @@ import {
   addNotification,
   setNotifications,
 } from "../../../redux/notificationSlice";
-import axios from "axios";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useGetNotificationsQuery } from "../../../services/api";
 
 const HeaderInfo = () => {
   const { user } = useSelector((state) => state.user);
@@ -16,21 +16,18 @@ const HeaderInfo = () => {
   const navigate = useNavigate();
   const notifications = useSelector((state) => state.notifications);
 
-  // Fetch notifications once on mount
-  useEffect(() => {
-    axios
-      .get(`${import.meta.env.VITE_BASE_URL}notification/`)
-      .then((response) => {
-        if (response.data) {
-          dispatch(setNotifications(response.data));
-        }
-      })
-      .catch(() => {
-        toast.error("Error fetching notifications");
-      });
-  }, [dispatch]); // ✅ runs only once
+  // Initial list, sent with the auth cookie by the RTK Query base query.
+  const { data: notificationsData, isError } = useGetNotificationsQuery();
 
-  // Register socket listener separately, also only once
+  useEffect(() => {
+    if (notificationsData) dispatch(setNotifications(notificationsData));
+  }, [notificationsData, dispatch]);
+
+  useEffect(() => {
+    if (isError) toast.error("Error fetching notifications");
+  }, [isError]);
+
+  // The ONLY place that listens for live notifications.
   useEffect(() => {
     const handleNotification = (newNotification) => {
       dispatch(addNotification(newNotification));
@@ -38,11 +35,13 @@ const HeaderInfo = () => {
     };
 
     socket.on("notification", handleNotification);
-
     return () => {
-      socket.off("notification", handleNotification); 
+      socket.off("notification", handleNotification);
     };
-  }, [dispatch]); 
+  }, [dispatch]);
+
+  const fullName =
+    `${user?.first_name ?? ""} ${user?.last_name ?? ""}`.trim() || "admin";
 
   return (
     <div className="bg-white text-black shadow capitalize w-full h-[70px] flex flex-wrap md:flex-nowrap justify-between px-4 md:pl-[3rem] md:pr-[15rem] items-center">
@@ -71,10 +70,7 @@ const HeaderInfo = () => {
           </Badge>
         </div>
         <Typography className="text-sm md:text-lg font-bold">
-          Welcome{" "}
-          <span className="text-mainGreen text-wrap">
-            {user.first_name + " " + user.last_name || "admin"}
-          </span>
+          Welcome <span className="text-mainGreen text-wrap">{fullName}</span>
         </Typography>
       </div>
     </div>

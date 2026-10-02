@@ -1,77 +1,46 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { Input, Card, CardHeader, CardBody } from "@material-tailwind/react";
-import { phantomGet } from "phantom-request"; 
 import Pagination from "../pagination/pagination";
 import { Loader } from "../../common/loaders";
-import Cookies from "js-cookie";
+import { useGetDriversQuery } from "../../../services/api";
+
+const EMPTY = [];
+const ITEMS_PER_PAGE = 15;
+const HEADERS = [
+  "Full Name",
+  "Phone Number",
+  "Address",
+  "Vehicle Type",
+  "Review Status",
+];
 
 export function DriverTable() {
-  const jwt = Cookies.get("jwt");
-  const [drivers, setDrivers] = useState([]); 
-  const [filteredDetails, setFilteredDetails] = useState([]); 
-  const [searchField, setSearchField] = useState("");
   const navigate = useNavigate();
-
-  // Pagination state
-  const [totalPages, setTotalPages] = useState(1);
+  const [searchField, setSearchField] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
 
-  const { data: driverData, loading, refetch } = phantomGet({
-    route: "driver",
-    token: jwt,
-    params: { page: currentPage, limit: itemsPerPage },
-    fetchOnMount: false,
+  const { data, isFetching } = useGetDriversQuery({
+    page: currentPage,
+    limit: ITEMS_PER_PAGE,
   });
+  const drivers = data?.driver ?? EMPTY;
+  const totalPages = data?.totalPages || 1;
 
-  useEffect(() => {
-    refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
-
-  useEffect(() => {
-    if (driverData) {
-      setDrivers(driverData.driver || []);
-      setFilteredDetails(driverData.driver || []);
-      setTotalPages(driverData.totalPages || 1);
-    }
-  }, [driverData]);
-
-  // Handle search
-  useEffect(() => {
-    const searchLower = searchField.toLowerCase();
-
-    const filtered = drivers.filter((driver) => {
-      // Coalesce each field into an empty string to avoid "undefined"
-      const firstName = (driver.firstName || "").toLowerCase();
-      const lastName = (driver.lastName || "").toLowerCase();
-      const email = (driver.email || "").toLowerCase();
-      const phone = (driver.phoneNumber || "").toLowerCase();
-      const licensePlate = (driver.licensePlate || "").toLowerCase(); // if you ever add this
-      const vehicleType = (driver.vehicleType || "").toLowerCase();
-
-      return (
-        firstName.includes(searchLower) ||
-        lastName.includes(searchLower) ||
-        email.includes(searchLower) ||
-        phone.includes(searchLower) ||
-        licensePlate.includes(searchLower) ||
-        vehicleType.includes(searchLower)
-      );
-    });
-
-    setFilteredDetails(filtered);
-  }, [searchField, drivers]);
-
-  const handleRowClick = (driverId) => {
-    navigate(`/driver/${driverId}`);
-  };
-
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
-  };
+  const filteredDetails = useMemo(() => {
+    const term = searchField.toLowerCase();
+    const has = (v) => String(v ?? "").toLowerCase().includes(term);
+    return drivers.filter(
+      (d) =>
+        has(d.firstName) ||
+        has(d.lastName) ||
+        has(d.email) ||
+        has(d.phoneNumber) ||
+        has(d.licensePlate) ||
+        has(d.vehicleType)
+    );
+  }, [drivers, searchField]);
 
   return (
     <Card className="h-full w-[96%] mx-auto">
@@ -95,77 +64,66 @@ export function DriverTable() {
         <table className="w-full min-w-max table-auto text-left">
           <thead>
             <tr>
-              <th className="border-y font-medium font-roboto border-blue-gray-100 bg-blue-gray-50/50 p-4">
-                Full Name
-              </th>
-              <th className="border-y font-medium font-roboto border-blue-gray-100 bg-blue-gray-50/50 p-4">
-                Phone Number
-              </th>
-              <th className="border-y font-medium font-roboto border-blue-gray-100 bg-blue-gray-50/50 p-4">
-                Address
-              </th>
-              <th className="border-y font-medium font-roboto border-blue-gray-100 bg-blue-gray-50/50 p-4">
-                Vehicle Type
-              </th>
-              <th className="border-y font-medium font-roboto border-blue-gray-100 bg-blue-gray-50/50 p-4">
-                Review Status
-              </th>
+              {HEADERS.map((h) => (
+                <th
+                  key={h}
+                  className="border-y font-medium font-roboto border-blue-gray-100 bg-blue-gray-50/50 p-4"
+                >
+                  {h}
+                </th>
+              ))}
             </tr>
           </thead>
 
-          {filteredDetails.length > 0 ? (
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan="5" className="text-center py-4">
-                    <Loader />
-                  </td>
-                </tr>
-              ) : (
-                filteredDetails.map((driver) => (
-                  <tr
-                    key={driver?._id}
-                    className="cursor-pointer hover:bg-gray-100"
-                    onClick={() => handleRowClick(driver?._id)}
-                  >
-                    <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
-                      {driver?.firstName} {driver?.lastName}
-                    </td>
-                    <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
-                      {driver?.phoneNumber}
-                    </td>
-                    <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
-                      {driver?.address}
-                    </td>
-                    <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
-                      {driver?.vehicleType}
-                    </td>
-                    <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
-                      {driver?.review ? "Verified" : "Under Review"}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          ) : (
-            <tbody>
+          <tbody>
+            {isFetching ? (
+              <tr>
+                <td colSpan={HEADERS.length} className="text-center py-4">
+                  <Loader />
+                </td>
+              </tr>
+            ) : filteredDetails.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={HEADERS.length}
                   className="text-center font-roboto font-semibold py-14 text-3xl"
                 >
                   No driver to display
                 </td>
               </tr>
-            </tbody>
-          )}
+            ) : (
+              filteredDetails.map((driver) => (
+                <tr
+                  key={driver?._id}
+                  className="cursor-pointer hover:bg-gray-100"
+                  onClick={() => navigate(`/driver/${driver?._id}`)}
+                >
+                  <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
+                    {driver?.firstName} {driver?.lastName}
+                  </td>
+                  <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
+                    {driver?.phoneNumber}
+                  </td>
+                  <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
+                    {driver?.address}
+                  </td>
+                  <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
+                    {driver?.vehicleType}
+                  </td>
+                  <td className="p-4 font-workSans text-md border-b border-blue-gray-50">
+                    {driver?.review ? "Verified" : "Under Review"}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
         </table>
       </CardBody>
 
       <Pagination
         currentPage={currentPage}
         totalItems={totalPages}
-        onPageChange={handlePageChange}
+        onPageChange={setCurrentPage}
       />
     </Card>
   );

@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { phantomDelete, phantomGet, phantomPut } from "phantom-request";
+import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { Loader } from "../../common/loaders";
 import DefaultLayout from "../../../layouts/defaultLayout";
 import { toast } from "react-toastify";
@@ -10,43 +9,46 @@ import {
   DialogBody,
   DialogFooter,
 } from "@material-tailwind/react";
+import {
+  useDeleteDriverMutation,
+  useGetDriverQuery,
+  useSetDriverReviewMutation,
+} from "../../../services/api";
 
 export function DriverDetail() {
   const { driverId } = useParams();
-  const [driver, setDriver] = useState(null);
+  const navigate = useNavigate();
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
 
-  const { data } = phantomGet({ route: `driver/${driverId}` });
+  // setDriverReview / deleteDriver invalidate the "Driver" tag, so this
+  // query refetches automatically after a review toggle.
+  const { data: driver, isLoading, isError } = useGetDriverQuery(driverId);
+  const [setDriverReview, { isLoading: toggling }] =
+    useSetDriverReviewMutation();
+  const [deleteDriver, { isLoading: deleting }] = useDeleteDriverMutation();
 
-  const { put, response, latestData } = phantomPut({
-    route: `driver/${driverId}/review`,
-    getLatestData: `driver/${driverId}`,
-  });
-
-  const { deleteRequest } = phantomDelete({
-    route: `driver/${driverId}`,
-  });
-
-  useEffect(() => {
-    if (data) {
-      setDriver(data);
+  const handleReviewToggle = async () => {
+    try {
+      await setDriverReview({ id: driverId, review: !driver.review }).unwrap();
+      toast.success(
+        driver.review ? "Driver set to under review." : "Driver verified."
+      );
+    } catch (err) {
+      toast.error(err?.data?.message || "Failed to update driver.");
     }
-    if (response) {
-      setDriver(latestData);
-    }
-  }, [data, response, latestData]);
-
-  const handleReviewToggle = () => {
-    const updatedReview = !driver.review;
-    put({ review: updatedReview });
   };
 
   const handleDelete = async () => {
-    deleteRequest();
-    toast.success("Account deleted successfully!");
-    setIsDeleteModalOpen(false);
+    try {
+      await deleteDriver(driverId).unwrap();
+      toast.success("Account deleted successfully!");
+      setIsDeleteModalOpen(false);
+      navigate("/driver");
+    } catch (err) {
+      toast.error(err?.data?.message || "Failed to delete driver.");
+    }
   };
 
   const handleImageClick = (imgSrc) => {
@@ -54,7 +56,25 @@ export function DriverDetail() {
     setIsImageModalOpen(true);
   };
 
-  if (!driver) return <Loader />;
+  if (isLoading) return <Loader />;
+
+  if (isError || !driver) {
+    return (
+      <DefaultLayout>
+        <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+          <p className="text-red-500 text-lg font-semibold">
+            Failed to load driver details.
+          </p>
+          <button
+            className="px-4 py-2 bg-gray-300 rounded-md shadow hover:bg-gray-400 transition"
+            onClick={() => navigate("/driver")}
+          >
+            Back to Drivers
+          </button>
+        </div>
+      </DefaultLayout>
+    );
+  }
 
   return (
     <DefaultLayout>
@@ -83,70 +103,17 @@ export function DriverDetail() {
               )}
             </div>
             <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  First Name:
-                </label>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
-                  {driver.firstName}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Last Name:
-                </label>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
-                  {driver.lastName}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Email:
-                </label>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
-                  {driver.email}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Phone Number:
-                </label>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
-                  {driver.phoneNumber}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Home Address:
-                </label>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
-                  {driver.address}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  City:
-                </label>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
-                  {driver.workCity}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Date of Birth:
-                </label>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
-                  {driver.dateOfBirth}
-                </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">
-                  Status:
-                </label>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
-                  {driver.status ? "Active" : "Inactive"}
-                </p>
-              </div>
+              <Field label="First Name:" value={driver.firstName} />
+              <Field label="Last Name:" value={driver.lastName} />
+              <Field label="Email:" value={driver.email} />
+              <Field label="Phone Number:" value={driver.phoneNumber} />
+              <Field label="Home Address:" value={driver.address} />
+              <Field label="City:" value={driver.workCity} />
+              <Field label="Date of Birth:" value={driver.dateOfBirth} />
+              <Field
+                label="Status:"
+                value={driver.status ? "Active" : "Inactive"}
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-700">
                   Proof of Identity:
@@ -174,19 +141,22 @@ export function DriverDetail() {
                 )}
               </div>
               <div className="sm:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Account Created:
-                </label>
-                <p className="mt-1 text-lg font-semibold text-gray-900">
-                  {new Date(driver.createdAt).toLocaleDateString()}
-                </p>
+                <Field
+                  label="Account Created:"
+                  value={
+                    driver.createdAt
+                      ? new Date(driver.createdAt).toLocaleDateString()
+                      : "—"
+                  }
+                />
               </div>
             </div>
           </div>
           <div className="px-8 pb-8 flex justify-end space-x-4">
             <button
               onClick={handleReviewToggle}
-              className={`px-6 py-3 rounded-md font-semibold shadow transition duration-200 ${
+              disabled={toggling}
+              className={`px-6 py-3 rounded-md font-semibold shadow transition duration-200 disabled:opacity-60 ${
                 driver.review
                   ? "bg-red-500 hover:bg-red-600 text-white"
                   : "bg-mainGreen hover:bg-green-700 text-white"
@@ -213,7 +183,8 @@ export function DriverDetail() {
             Confirm Deletion
           </DialogHeader>
           <DialogBody divider className="text-gray-800">
-            Are you sure you want to delete this driver? This action cannot be undone.
+            Are you sure you want to delete this driver? This action cannot be
+            undone.
           </DialogBody>
           <DialogFooter>
             <button
@@ -223,8 +194,9 @@ export function DriverDetail() {
               Cancel
             </button>
             <button
-              className="ml-3 px-4 py-2 bg-red-500 text-white rounded-md shadow hover:bg-red-600 transition"
+              className="ml-3 px-4 py-2 bg-red-500 text-white rounded-md shadow hover:bg-red-600 transition disabled:opacity-60"
               onClick={handleDelete}
+              disabled={deleting}
             >
               Delete
             </button>
@@ -247,7 +219,9 @@ export function DriverDetail() {
                 alt="Full View"
                 className="max-w-full max-h-[70vh] object-contain rounded-md"
               />
-            ): ""}
+            ) : (
+              ""
+            )}
           </DialogBody>
           <DialogFooter>
             <button
@@ -260,5 +234,16 @@ export function DriverDetail() {
         </Dialog>
       </div>
     </DefaultLayout>
+  );
+}
+
+function Field({ label, value }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700">{label}</label>
+      <p className="mt-1 text-lg font-semibold text-gray-900">
+        {value || "—"}
+      </p>
+    </div>
   );
 }

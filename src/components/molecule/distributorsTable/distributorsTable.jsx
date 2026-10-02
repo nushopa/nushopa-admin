@@ -10,127 +10,67 @@ import {
   DialogBody,
   DialogFooter,
 } from "@material-tailwind/react";
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import Pagination from "../pagination/pagination";
-import { useDeleteDistributorMutation } from "../../../services/api";
+import {
+  useDeleteDistributorMutation,
+  useGetDistributorsQuery,
+  useUpdateAssignMutation,
+  useUpdateUnassignMutation,
+} from "../../../services/api";
 import { UpdateDistributorsDialog } from "../dialogs/updateDistributorsDialog";
 import useDeleteHandler from "../../../lib/hook/useDeleteHandler";
-import { phantomGet, phantomPost } from "phantom-request";
-import Cookies from "js-cookie";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { DistributorsTableComponent } from "./DistributorsTableComponent";
 
+const EMPTY = [];
+const ITEMS_PER_PAGE = 15;
+
 export function DistributorsTable() {
-  const jwt = Cookies.get("jwt");
   const navigate = useNavigate();
 
-  const [distributors, setDistributors] = useState([]);
-  const [filteredDetails, setFilteredDetails] = useState([]);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [selectedDistributorId, setSelectedDistributorId] = useState(null);
   const [deleteDistributorMutation] = useDeleteDistributorMutation();
-  const { handleDelete } = useDeleteHandler(deleteDistributorMutation, "distributor");
+  const { handleDelete } = useDeleteHandler(
+    deleteDistributorMutation,
+    "distributor"
+  );
   const [searchField, setSearchField] = useState("");
-
   const [assignedDistributorId, setAssignedDistributorId] = useState(null);
-
-  // Pagination state
-  const [totalPages, setTotalPages] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
 
-  // For assigning orders
-  const { post, response, error } = phantomPost({
-    route: "order/assign",
+  const [updateAssign] = useUpdateAssignMutation();
+  const [updateUnassign] = useUpdateUnassignMutation();
+
+  const { data, isFetching } = useGetDistributorsQuery({
+    page: currentPage,
+    limit: ITEMS_PER_PAGE,
   });
+  const distributors = data?.distributors ?? EMPTY;
+  const totalPages = data?.totalPages || 1;
 
-  // For unassigning orders
-  const {
-    post: postUnassign,
-    response: unassignResponse,
-    error: unassignError,
-  } = phantomPost({
-    route: "order/unassign",
-  });
+  // The row component shows first_name/last_name, other code uses
+  // firstName/lastName, so search every variant.
+  const filteredDetails = useMemo(() => {
+    const term = searchField.toLowerCase();
+    const has = (v) => String(v ?? "").toLowerCase().includes(term);
+    return distributors.filter(
+      (d) =>
+        has(d.city) ||
+        has(d.contact) ||
+        has(d.address) ||
+        has(d.email) ||
+        has(d.phone_number) ||
+        has(d.first_name) ||
+        has(d.last_name) ||
+        has(d.firstName) ||
+        has(d.lastName)
+    );
+  }, [distributors, searchField]);
 
-  // Fetch distributors
-  const {
-    data: distributorData,
-    loading,
-    refetch,
-  } = phantomGet({
-    route: "customers/distributors",
-    token: jwt,
-    params: { page: currentPage, limit: itemsPerPage },
-    fetchOnMount: false,
-  });
-
-  // Whenever currentPage changes, re-fetch
-  useEffect(() => {
-    refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage]);
-
-  // When data / assign response / error arrives, update state or navigate
-  useEffect(() => {
-    if (distributorData) {
-      setDistributors(distributorData.distributors || []);
-      setFilteredDetails(distributorData.distributors || []);
-      setTotalPages(distributorData.totalPages || 1);
-    }
-
-    if (response) {
-      const orderID = response.order?.orderID;
-      const distributorId = response.order?.distributor_assigned?._id;
-      if (orderID && distributorId) {setAssignedDistributorId(distributorId);
-        navigate(`/chat/${distributorId}?order=${orderID}`);
-      }
-    }
-
-    if (error) {
-      toast.error(error.response?.data?.message || "Something went wrong.");
-    }
-
-    if (unassignResponse) {
-      toast.success("Distributor unassigned successfully.");
-      setAssignedDistributorId(null);
-      refetch();
-    }
-
-    if (unassignError) {
-      toast.error(unassignError.response?.data?.message || "Failed to unassign distributor.");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distributorData, response, error, unassignResponse, unassignError]);
-
-  // Search filter
-  useEffect(() => {
-    const searchLower = searchField.toLowerCase();
-
-    const filteredDistributors = distributors.filter((distributor) => {
-      const city = (distributor.city || "").toLowerCase();
-      const contact = (distributor.contact || "").toLowerCase();
-      const address = (distributor.address || "").toLowerCase();
-      const firstName = (distributor.firstName || "").toLowerCase();
-      const lastName = (distributor.lastName || "").toLowerCase();
-
-      return (
-        city.includes(searchLower) ||
-        contact.includes(searchLower) ||
-        address.includes(searchLower) ||
-        firstName.includes(searchLower) ||
-        lastName.includes(searchLower)
-      );
-    });
-
-    setFilteredDetails(filteredDistributors);
-  }, [searchField, distributors]);
-
-  // Pagination callback
-  const handlePageChange = (pageNumber) => setCurrentPage(pageNumber);
-
-  // Order assignment dialog state
+  // ---------- Assign (needs an order ID) ----------
   const [orderDialogOpen, setOrderDialogOpen] = useState(false);
   const [orderId, setOrderId] = useState("");
 
@@ -144,18 +84,31 @@ export function DistributorsTable() {
       toast.error("Please enter a valid Order ID.");
       return;
     }
-    post({ orderID: orderId, distributorID: selectedDistributorId });
-    setOrderDialogOpen(false);
-    setOrderId("");
+    try {
+      const res = await updateAssign({
+        orderID: orderId.trim(),
+        distributorID: selectedDistributorId,
+      }).unwrap();
+
+      const assignedOrderID = res?.order?.orderID;
+      const distributorId = res?.order?.distributor_assigned?._id;
+      if (assignedOrderID && distributorId) {
+        setAssignedDistributorId(distributorId);
+        navigate(`/chat/${distributorId}?order=${assignedOrderID}`);
+      }
+    } catch (err) {
+      toast.error(err?.data?.message || "Something went wrong.");
+    } finally {
+      handleOrderDialogClose();
+    }
   };
 
-  // ✅ Assign: opens the order ID dialog
   const handleAssign = (distributorId) => {
     setSelectedDistributorId(distributorId);
     setOrderDialogOpen(true);
   };
 
-  // ✅ Unassign: opens confirmation modal (no orderId needed from outside — use tracked state)
+  // ---------- Unassign ----------
   const [unassignDialogOpen, setUnassignDialogOpen] = useState(false);
 
   const handleUnassign = (distributorId) => {
@@ -163,10 +116,17 @@ export function DistributorsTable() {
     setUnassignDialogOpen(true);
   };
 
-  const handleUnassignConfirm = () => {
-    postUnassign({ distributorID: selectedDistributorId });
-    setUnassignDialogOpen(false);
-    setSelectedDistributorId(null);
+  const handleUnassignConfirm = async () => {
+    try {
+      await updateUnassign({ distributorID: selectedDistributorId }).unwrap();
+      toast.success("Distributor unassigned successfully.");
+      setAssignedDistributorId(null);
+    } catch (err) {
+      toast.error(err?.data?.message || "Failed to unassign distributor.");
+    } finally {
+      setUnassignDialogOpen(false);
+      setSelectedDistributorId(null);
+    }
   };
 
   const handleUnassignCancel = () => {
@@ -187,7 +147,8 @@ export function DistributorsTable() {
       <Dialog open={unassignDialogOpen} handler={handleUnassignCancel} size="sm">
         <DialogHeader>Unassign Distributor</DialogHeader>
         <DialogBody>
-          Are you sure you want to unassign this distributor from the order? This action cannot be undone.
+          Are you sure you want to unassign this distributor from the order?
+          This action cannot be undone.
         </DialogBody>
         <DialogFooter>
           <Button
@@ -248,7 +209,7 @@ export function DistributorsTable() {
       <CardBody className="px-1">
         <DistributorsTableComponent
           distributors={filteredDetails}
-          loading={loading}
+          loading={isFetching}
           onRowClick={(id) => navigate(`/distributor/${id}`)}
           onEdit={(id) => {
             setSelectedDistributorId(id);
@@ -257,7 +218,7 @@ export function DistributorsTable() {
           onDelete={handleDelete}
           assignedDistributorId={assignedDistributorId}
           onAssign={handleAssign}
-          onUnassign={(id) => handleUnassign(id)}
+          onUnassign={handleUnassign}
           onView={(id) => navigate(`/distributor/${id}`)}
         />
       </CardBody>
@@ -266,7 +227,7 @@ export function DistributorsTable() {
       <Pagination
         currentPage={currentPage}
         totalItems={totalPages}
-        onPageChange={handlePageChange}
+        onPageChange={setCurrentPage}
       />
     </Card>
   );

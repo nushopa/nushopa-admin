@@ -1,88 +1,75 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import MessageList from "../components/chat/messageList";
 import MessageInput from "../components/chat/messageInput";
 import { useSearchParams } from "react-router-dom";
 import DefaultLayout from "../layouts/defaultLayout";
 import { socket } from "../services/socket";
-import { phantomGet, phantomPut } from "phantom-request";
 import { Button, Typography } from "@material-tailwind/react";
+import { toast } from "react-toastify";
+import {
+  useAssignDriverMutation,
+  useGetAssignedDriverQuery,
+  useGetDriversQuery,
+  useGetOrderQuery,
+  useUnassignDriverMutation,
+} from "../services/api";
+
+const EMPTY = [];
+const DRIVER_LIMIT = 100;
 
 const ChatApp = () => {
   const [status, setStatus] = useState("");
   const [messages, setMessages] = useState([]);
-  const [currentAssigned, setCurrentAssigned] = useState(null);
-  const [activeDriver, setActiveDriver] = useState([]);
-  const [showDriverList, setShowDriverList] = useState(false); // New state
+  const [showDriverList, setShowDriverList] = useState(false);
   const [searchParams] = useSearchParams();
   const orderID = searchParams.get("order");
   const bottomRef = useRef(null);
-  const itemsPerPage = 15;
 
-  const { data: orderData } = phantomGet({ route: `order/${orderID}` });
-  const { data: assignedDriver } = phantomGet({ route: `order/driver/assigned/${orderID}` });
-
-  const { data: drivers, refetch } = phantomGet({
-    route: "driver",
-    params: { limit: itemsPerPage },
-    fetchOnMount: false,
+  const { data: orderData } = useGetOrderQuery(orderID, { skip: !orderID });
+  const { data: assignedDriver } = useGetAssignedDriverQuery(orderID, {
+    skip: !orderID,
   });
-  const { put, response, error } = phantomPut({
-    route: "order/assign-driver",
-    getLatestData: `order/${orderID}`,
+  const { data: driversData } = useGetDriversQuery({
+    page: 1,
+    limit: DRIVER_LIMIT,
   });
-  const { put: unassignDriver } = phantomPut({
-    route: "order/unassign-driver",
-    getLatestData: `order/${orderID}`,
-  });
-  useEffect(() => {
-    if (assignedDriver?.driver) {
-      setCurrentAssigned(assignedDriver?.driver?._id || null);
-    } else {
-      setCurrentAssigned(null); // Handle when no distributor is assigned
-    }
-  }, [assignedDriver]);
+
+  const [assignDriver, { isLoading: assigning }] = useAssignDriverMutation();
+  const [unassignDriver, { isLoading: unassigning }] =
+    useUnassignDriverMutation();
+
+  // Server is the source of truth; mutations invalidate "Order" so this
+  // refreshes after assign / unassign.
+  const currentAssigned = assignedDriver?.driver?._id ?? null;
+
+  const activeDrivers = useMemo(
+    () => (driversData?.driver ?? EMPTY).filter((d) => d.status === true),
+    [driversData]
+  );
 
   useEffect(() => {
-    refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (error) {
-      console.error(error);
-    }
-    if (drivers) {
-      const activeDrivers = drivers.driver.filter((driver) => driver.status === true);
-      setActiveDriver(activeDrivers);
-    }
-  }, [drivers, error, response]);
-
-  useEffect(() => {
-    if (orderData) {
-      setStatus(orderData?.orders[0]?.status);
-    }
+    if (orderData) setStatus(orderData?.orders?.[0]?.status ?? "");
   }, [orderData]);
 
   useEffect(() => {
-    socket.on("connect", () => {
+    const handleConnect = () =>
       console.log("Connected to socket server with ID:", socket.id);
-    });
 
-    if (orderID) {
-      socket.emit("joinRoom", { orderID });
-    }
-
-    socket.on("receiveMessage", (data) => {
+    const handleReceive = (data) => {
       if (Array.isArray(data)) {
         setMessages(data);
       } else if (data) {
-        setMessages((prevMessages) => [...prevMessages, data]);
+        setMessages((prev) => [...prev, data]);
       }
-    });
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("receiveMessage", handleReceive);
+    if (orderID) socket.emit("joinRoom", { orderID });
 
     return () => {
-      socket.off("receiveMessage");
-      console.log("Socket connection closed.");
+      socket.off("connect", handleConnect);
+      socket.off("receiveMessage", handleReceive);
     };
   }, [orderID]);
 
@@ -90,16 +77,24 @@ const ChatApp = () => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleDriverSelect = (driver) => {
-    put({ orderID, driverID: driver._id });
-    setCurrentAssigned(driver._id);
-    setStatus("driver assigned");
+  const handleDriverSelect = async (driver) => {
+    try {
+      await assignDriver({ orderID, driverID: driver._id }).unwrap();
+      setStatus("driver assigned");
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.data?.message || "Failed to assign driver.");
+    }
   };
 
-  const handleUnassign = () => {
-    unassignDriver({ orderID });
-    setCurrentAssigned(null);
-    setStatus("ready for pickup");
+  const handleUnassign = async () => {
+    try {
+      await unassignDriver({ orderID }).unwrap();
+      setStatus("ready for pickup");
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.data?.message || "Failed to unassign driver.");
+    }
   };
 
   const handleSendMessage = (text) => {
@@ -113,8 +108,7 @@ const ChatApp = () => {
         type: "text",
         text,
       };
-
-      setMessages((prevMessages) => [...prevMessages, messageWithTimestamp]);
+      setMessages((prev) => [...prev, messageWithTimestamp]);
     });
   };
 
@@ -124,40 +118,51 @@ const ChatApp = () => {
         <MessageList messages={messages} />
         <div ref={bottomRef} />
 
-        {showDriverList && status === "ready for pickup" && activeDriver.length > 0 && (
-          <div className="flex flex-col min-h-fit max-h-[10rem] overflow-y-auto fixed bottom-48 right-0 w-full max-w-[84%] space-y-2 p-4 bg-gray-100 rounded-lg">
-            {activeDriver.map((driver, index) => {
-              const isAssigned = currentAssigned === driver._id;
-              return (
-                <div
-                  key={index}
-                  className="cursor-pointer flex justify-between items-center p-2 hover:bg-gray-200 rounded"
-                >
-                  <Typography>{driver?.firstName} {driver?.lastName}</Typography>
-                  <div className="flex gap-4">
-                    <Button
-                      variant="gradient"
-                      onClick={() => handleDriverSelect(driver)}
-                      disabled={currentAssigned !== null}
-                    >
-                      {isAssigned ? "Assigned" : "Assign"}
-                    </Button>
-                    {isAssigned && (
+        {showDriverList &&
+          status === "ready for pickup" &&
+          activeDrivers.length > 0 && (
+            <div className="flex flex-col min-h-fit max-h-[10rem] overflow-y-auto fixed bottom-48 right-0 w-full max-w-[84%] space-y-2 p-4 bg-gray-100 rounded-lg">
+              {activeDrivers.map((driver) => {
+                const isAssigned = currentAssigned === driver._id;
+                return (
+                  <div
+                    key={driver._id}
+                    className="cursor-pointer flex justify-between items-center p-2 hover:bg-gray-200 rounded"
+                  >
+                    <Typography>
+                      {driver?.firstName} {driver?.lastName}
+                    </Typography>
+                    <div className="flex gap-4">
                       <Button
-                        variant="outlined"
-                        onClick={handleUnassign}
+                        variant="gradient"
+                        onClick={() => handleDriverSelect(driver)}
+                        disabled={currentAssigned !== null || assigning}
                       >
-                        Unassign
+                        {isAssigned ? "Assigned" : "Assign"}
                       </Button>
-                    )}
+                      {isAssigned && (
+                        <Button
+                          variant="outlined"
+                          onClick={handleUnassign}
+                          disabled={unassigning}
+                        >
+                          Unassign
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          )}
 
-        <MessageInput setShowDriverList={() => setShowDriverList(!showDriverList)} onSendMessage={handleSendMessage} status={status} orderID={orderID} setStatus={setStatus} />
+        <MessageInput
+          setShowDriverList={() => setShowDriverList((v) => !v)}
+          onSendMessage={handleSendMessage}
+          status={status}
+          orderID={orderID}
+          setStatus={setStatus}
+        />
       </div>
     </DefaultLayout>
   );

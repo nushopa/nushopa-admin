@@ -1,7 +1,4 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { phantomGet } from "phantom-request";
-import Cookies from "js-cookie";
 import {
   Card,
   CardBody,
@@ -11,35 +8,15 @@ import {
 } from "@material-tailwind/react";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { AddCommasToNumber } from "../utils/utils";
+import { useGetOrderQuery } from "../services/api";
 
 export default function OrderDetails() {
   const { orderID } = useParams();
   const navigate = useNavigate();
-  const jwt = Cookies.get("jwt");
 
-  const [orderData, setOrderData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { data: orderData, isLoading, isError } = useGetOrderQuery(orderID);
 
-  const { data, refetch } = phantomGet({
-    route: `order/${orderID}`,
-    token: jwt,
-    fetchOnMount: false,
-  });
-
-  useEffect(() => {
-    refetch();
-  }, [orderID]); // eslint-disable-line
-
-  useEffect(() => {
-    if (data) {
-      setOrderData(data);
-      setLoading(false);
-      setError(null);
-    }
-  }, [data]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-96">
         <Typography>Loading order details...</Typography>
@@ -47,7 +24,7 @@ export default function OrderDetails() {
     );
   }
 
-  if (error || !orderData) {
+  if (isError || !orderData) {
     return (
       <div className="flex items-center justify-center h-96">
         <Typography color="red">
@@ -114,9 +91,8 @@ export default function OrderDetails() {
         <Chip value={status} color={statusColor} size="sm" />
       </div>
 
-      {/* Top grid — customer + order info */}
+      {/* Top grid: customer + order info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Customer card */}
         <Card>
           <CardHeader
             floated={false}
@@ -155,7 +131,6 @@ export default function OrderDetails() {
           </CardBody>
         </Card>
 
-        {/* Order info card */}
         <Card>
           <CardHeader
             floated={false}
@@ -175,7 +150,7 @@ export default function OrderDetails() {
               <Row label="Date" value={formattedDate} />
               <Row
                 label="Amount paid"
-                value={`₦${AddCommasToNumber(amount_paid)}`}
+                value={`₦${AddCommasToNumber(amount_paid ?? 0)}`}
                 bold
               />
               <Row label="Delivery code" value={delivery_code ?? "—"} mono />
@@ -214,44 +189,45 @@ export default function OrderDetails() {
               </tr>
             </thead>
             <tbody>
-              {(products ?? []).map((item, i) => (
-                <tr
-                  key={i}
-                  className="border-b border-blue-gray-50 last:border-0"
-                >
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-3">
-                      {(item.product_id?.product_image ??
-                      item.product_image) ? (
-                        <img
-                          src={
-                            item.product_id?.product_image ?? item.product_image
-                          }
-                          alt={item.product_id?.product_name ?? "Product"}
-                          className="w-10 h-10 rounded object-cover border border-blue-gray-50"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
-                          N/A
-                        </div>
-                      )}
-                      <span>
-                        {item.product_id?.product_name ??
-                          item.product_id ??
-                          "—"}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="text-right px-6 py-3">
-                    {item.product_quatity ?? item.product_quantity ?? "—"}
-                  </td>
-                  <td className="text-right px-6 py-3">
-                    {item.product_id?.price
-                      ? `₦${AddCommasToNumber(item.product_id.price)}`
-                      : "—"}
-                  </td>
-                </tr>
-              ))}
+              {(products ?? []).map((item, i) => {
+                const img = item.product_id?.product_image ?? item.product_image;
+                return (
+                  <tr
+                    key={i}
+                    className="border-b border-blue-gray-50 last:border-0"
+                  >
+                    <td className="px-6 py-3">
+                      <div className="flex items-center gap-3">
+                        {img ? (
+                          <img
+                            src={img}
+                            alt={item.product_id?.product_name ?? "Product"}
+                            className="w-10 h-10 rounded object-cover border border-blue-gray-50"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
+                            N/A
+                          </div>
+                        )}
+                        <span>
+                          {item.product_id?.product_name ??
+                            (typeof item.product_id === "string"
+                              ? item.product_id
+                              : "—")}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="text-right px-6 py-3">
+                      {item.product_quatity ?? item.product_quantity ?? "—"}
+                    </td>
+                    <td className="text-right px-6 py-3">
+                      {item.product_id?.price
+                        ? `₦${AddCommasToNumber(item.product_id.price)}`
+                        : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </CardBody>
@@ -329,7 +305,9 @@ function Row({ label, value, bold, mono }) {
     <div className="flex justify-between py-1">
       <span className="text-gray-500">{label}</span>
       <span
-        className={`${bold ? "font-medium" : ""} ${mono ? "font-mono tracking-wide" : ""}`}
+        className={`${bold ? "font-medium" : ""} ${
+          mono ? "font-mono tracking-wide" : ""
+        }`}
       >
         {value}
       </span>

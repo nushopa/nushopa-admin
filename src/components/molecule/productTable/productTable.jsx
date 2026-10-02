@@ -1,15 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardHeader, Button, CardBody, Input } from "@material-tailwind/react";
 import { MagnifyingGlassIcon } from "@heroicons/react/24/outline";
 import { PlusIcon } from "@heroicons/react/24/solid";
-import { useDeleteProductMutation, useToggleProductStockMutation } from "../../../services/api";
+import {
+  useDeleteProductMutation,
+  useToggleProductStockMutation,
+  useGetProductsQuery,
+} from "../../../services/api";
 import { AddProductForm } from "../dialogs/addProductDialog";
 import { UpdateProductForm } from "../dialogs/updateProductDialog";
 import Pagination from "../pagination/pagination";
 import useDeleteHandler from "../../../lib/hook/useDeleteHandler";
-import { phantomGet } from "phantom-request";
 import { ProductTableList } from "./ProductTableList";
 
+const EMPTY = [];
 const ITEMS_PER_PAGE = 15;
 const SEARCH_FETCH_LIMIT = 1000;
 
@@ -17,94 +21,44 @@ export function ProductTable() {
   const [open, setOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState(null);
-
   const [searchField, setSearchField] = useState("");
-  const isSearching = searchField.trim().length > 0;
-
-  const [details, setDetails] = useState([]); // raw data from the API
-  const [filteredDetails, setFilteredDetails] = useState([]); // after search filter
   const [currentPage, setCurrentPage] = useState(1);
-  const [serverTotalPages, setServerTotalPages] = useState(1);
+  const isSearching = searchField.trim().length > 0;
 
   const [deleteProductMutation] = useDeleteProductMutation();
   const [toggleProductStock] = useToggleProductStockMutation();
   const { handleDelete } = useDeleteHandler(deleteProductMutation);
 
-  const { data: productData, loading, refetch } = phantomGet({
-    route: "product",
-    params: isSearching
-      ? { page: 1, limit: SEARCH_FETCH_LIMIT } // pull everything so search covers all products
-      : { page: currentPage, limit: ITEMS_PER_PAGE }, // normal server-side pagination
-    fetchOnMount: false,
-  });
+  // While searching, pull everything so search covers all products.
+  // Mutations invalidate the "Product" tag, so the list refetches by itself.
+  const { data, isFetching } = useGetProductsQuery(
+    isSearching ? { page: 1, limit: SEARCH_FETCH_LIMIT } : { page: currentPage, limit: ITEMS_PER_PAGE }
+  );
+  const products = data?.products ?? EMPTY;
+  const serverTotalPages = data?.totalPages || 1;
 
-  useEffect(() => {
-    refetch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, isSearching]);
+  useEffect(() => { setCurrentPage(1); }, [searchField]);
 
-  useEffect(() => {
-    if (productData) {
-      setDetails(productData?.products || []);
-      setServerTotalPages(productData?.totalPages || 1);
-    }
-  }, [productData]);
-
-  // Apply the text filter against whatever data is currently loaded.
-  useEffect(() => {
+  const filtered = useMemo(() => {
+    if (!isSearching) return products;
     const term = searchField.toLowerCase();
-    const filtered = details.filter(
-      (product) =>
-        product.product_name.toLowerCase().includes(term) ||
-        product.product_cat.toLowerCase().includes(term) ||
-        product.product_brand_name.toLowerCase().includes(term) ||
-        product.product_sub_cat.toLowerCase().includes(term)
+    const has = (v) => String(v ?? "").toLowerCase().includes(term);
+    // product_brand_name / product_sub_cat are optional -> must be null-safe
+    return products.filter(
+      (p) => has(p.product_name) || has(p.product_cat) || has(p.product_brand_name) || has(p.product_sub_cat)
     );
-    setFilteredDetails(filtered);
-  }, [searchField, details]);
+  }, [products, searchField, isSearching]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchField]);
-
-  const handleOpen = (shouldRefetch) => {
-    setOpen((cur) => !cur);
-    if (shouldRefetch) refetch();
-  };
-
-  const handleUpdateOpen = (productId) => {
-    setSelectedProductId(productId);
-    setUpdateOpen(true);
-  };
-
-  const handleUpdateClose = (shouldRefetch) => {
-    setUpdateOpen(false);
-    setSelectedProductId(null);
-    if (shouldRefetch) refetch();
-  };
-
-  const handlePageChange = (pageNumber) => setCurrentPage(pageNumber);
-
-  const handleDeleteAndRefetch = async (productId) => {
-    await handleDelete(productId);
-    refetch();
-  };
-
-  const visibleDetails = isSearching
-    ? filteredDetails.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE
-      )
-    : filteredDetails;
-
+  const visible = isSearching
+    ? filtered.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+    : filtered;
   const totalPages = isSearching
-    ? Math.max(1, Math.ceil(filteredDetails.length / ITEMS_PER_PAGE))
+    ? Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE))
     : serverTotalPages;
 
-    const handleToggleStock = async (productId, out_of_stock) => {
+  const handleToggleStock = async (id, out_of_stock) => {
     try {
-      await toggleProductStock({ id: productId, out_of_stock }).unwrap();
-      refetch();
+      await toggleProductStock({ id, out_of_stock }).unwrap();
     } catch (error) {
       console.error("Failed to toggle stock status:", error);
     }
@@ -116,17 +70,14 @@ export function ProductTable() {
         <div className="mb-4 flex flex-col justify-between gap-8 md:flex-row md:items-center">
           <div className="w-full md:w-72">
             <Input
-              type="text"
-              name="search-input"
-              label="Search"
+              type="text" name="search-input" label="Search"
               placeholder="use product name, brand name, category, sub category"
               icon={<MagnifyingGlassIcon className="h-5 w-5" />}
-              value={searchField}
-              onChange={(e) => setSearchField(e.target.value)}
+              value={searchField} onChange={(e) => setSearchField(e.target.value)}
             />
           </div>
           <div className="flex w-full shrink-0 gap-2 md:w-max">
-            <Button onClick={() => handleOpen(false)} className="flex items-center gap-3 capitalize bg-mainGreen" size="lg">
+            <Button onClick={() => setOpen(true)} className="flex items-center gap-3 capitalize bg-mainGreen" size="lg">
               <PlusIcon className="h-4 w-4" /> Add product
             </Button>
           </div>
@@ -135,17 +86,21 @@ export function ProductTable() {
 
       <CardBody className="px-1">
         <ProductTableList
-          loading={loading}
-          products={visibleDetails}
-          onDelete={handleDeleteAndRefetch}
-          onEdit={handleUpdateOpen}
+          loading={isFetching}
+          products={visible}
+          onDelete={handleDelete}
+          onEdit={(id) => { setSelectedProductId(id); setUpdateOpen(true); }}
           onToggleStock={handleToggleStock}
         />
       </CardBody>
 
-      <Pagination currentPage={currentPage} totalItems={totalPages} onPageChange={handlePageChange} />
-      <AddProductForm open={open} handleOpen={handleOpen} />
-      <UpdateProductForm open={updateOpen} handleOpen={handleUpdateClose} productId={selectedProductId} />
+      <Pagination currentPage={currentPage} totalItems={totalPages} onPageChange={setCurrentPage} />
+      <AddProductForm open={open} handleOpen={() => setOpen((c) => !c)} />
+      <UpdateProductForm
+        open={updateOpen}
+        handleOpen={() => { setUpdateOpen(false); setSelectedProductId(null); }}
+        productId={selectedProductId}
+      />
     </Card>
   );
 }

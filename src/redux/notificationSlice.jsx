@@ -1,18 +1,17 @@
 import { createSlice } from "@reduxjs/toolkit";
 
+const toArray = (p) =>
+  Array.isArray(p) ? p : p?.notifications ?? p?.data ?? [];
+
 const notificationSlice = createSlice({
   name: "notifications",
   initialState: [],
   reducers: {
-    setNotifications: (state, action) => {
-      return action.payload;
-    },
+    setNotifications: (state, action) => toArray(action.payload),
     addNotification: (state, action) => {
-      // Avoid duplicate notifications by checking _id
+      if (!action.payload) return;
       const exists = state.some((n) => n._id === action.payload._id);
-      if (!exists) {
-        state.push(action.payload);
-      }
+      if (!exists) state.push(action.payload);
     },
   },
 });

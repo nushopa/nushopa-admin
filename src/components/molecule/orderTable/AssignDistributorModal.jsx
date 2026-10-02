@@ -5,129 +5,69 @@ import {
   DialogFooter,
   Input,
   Button,
+  IconButton,
 } from "@material-tailwind/react";
 import { MagnifyingGlassIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { IconButton } from "@material-tailwind/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Pagination from "../pagination/pagination";
-import { phantomGet, phantomPost } from "phantom-request";
-import Cookies from "js-cookie";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
+import {
+  useGetDistributorsQuery,
+  useGetAssignedDistributorQuery,
+  useUpdateAssignMutation,
+  useUpdateUnassignMutation,
+} from "../../../services/api";
 import { DistributorsTableComponent } from "../distributorsTable/DistributorsTableComponent";
+
+const EMPTY = [];
+const ITEMS_PER_PAGE = 10;
 
 export function AssignDistributorModal({
   open,
   onClose,
   orderID,
-  onAssignSuccess,
+  onAssignSuccess, // optional
 }) {
-  const jwt = Cookies.get("jwt");
   const navigate = useNavigate();
 
-  const [distributors, setDistributors] = useState([]);
-  const [filteredDistributors, setFilteredDistributors] = useState([]);
   const [searchField, setSearchField] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const itemsPerPage = 10;
-
-  const [assignedDistributorId, setAssignedDistributorId] = useState(null);
   const [reassignConfirmOpen, setReassignConfirmOpen] = useState(false);
   const [pendingAssignId, setPendingAssignId] = useState(null);
 
-  const { post, response, error } = phantomPost({
-    route: "order/assign",
+  const [updateAssign] = useUpdateAssignMutation();
+  const [updateUnassign] = useUpdateUnassignMutation();
+
+  // Only hit the API while the modal is open.
+  const { data, isFetching } = useGetDistributorsQuery(
+    { page: currentPage, limit: ITEMS_PER_PAGE },
+    { skip: !open }
+  );
+  const distributors = data?.distributors ?? EMPTY;
+  const totalPages = data?.totalPages || 1;
+
+  const { data: assignmentData } = useGetAssignedDistributorQuery(orderID, {
+    skip: !open || !orderID,
   });
+  const assignedDistributorId = assignmentData?.distributor?._id ?? null;
 
-  const {
-    post: postUnassign,
-    response: unassignResponse,
-    error: unassignError,
-  } = phantomPost({
-    route: "order/unassign",
-  });
-
-  const {
-    data: distributorData,
-    loading,
-    refetch,
-  } = phantomGet({
-    route: "customers/distributors",
-    token: jwt,
-    params: { page: currentPage, limit: itemsPerPage },
-    fetchOnMount: false,
-  });
-
-  const { data: currentAssignmentData } = phantomGet({
-    route: `order/assigned/${orderID}`,
-    fetchOnMount: false,
-  });
-
-  useEffect(() => {
-    if (open) refetch();
-  }, [open, currentPage]); // eslint-disable-line
-
-  useEffect(() => {
-    if (currentAssignmentData?.distributor) {
-      setAssignedDistributorId(currentAssignmentData.distributor._id ?? null);
-    }
-  }, [currentAssignmentData]);
-
-  useEffect(() => {
-    if (distributorData) {
-      setDistributors(distributorData.distributors || []);
-      setFilteredDistributors(distributorData.distributors || []);
-      setTotalPages(distributorData.totalPages || 1);
-    }
-  }, [distributorData]);
-
-  // ✅ FIXED: added early return after success + guarded error check
-  useEffect(() => {
-    if (response?.order) {
-      const assignedOrderID = response.order.orderID;
-      const distributorId = response.order.distributor_assigned?._id;
-      if (assignedOrderID && distributorId) {
-        setAssignedDistributorId(distributorId);
-        onAssignSuccess?.(assignedOrderID, distributorId);
-        onClose();
-        navigate(`/chat/${distributorId}?order=${assignedOrderID}`);
-      }
-      return; // ✅ exit early, prevent falling into error block
-    }
-
-    if (error?.response) { // ✅ only fires when there's a real HTTP error
-      toast.error(error.response?.data?.message || "Something went wrong.");
-    }
-  }, [response, error]); // eslint-disable-line
-
-  // ✅ FIXED: added early return after success + guarded error check
-  useEffect(() => {
-    if (unassignResponse) {
-      toast.success("Distributor unassigned successfully.");
-      setAssignedDistributorId(null);
-      onAssignSuccess?.(orderID, null);
-      return; // ✅ exit early, prevent falling into error block
-    }
-
-    if (unassignError?.response) { // ✅ only fires when there's a real HTTP error
-      toast.error(
-        unassignError.response?.data?.message ||
-          "Failed to unassign distributor.",
-      );
-    }
-  }, [unassignResponse, unassignError]); // eslint-disable-line
-
-  useEffect(() => {
+  const filteredDistributors = useMemo(() => {
     const q = searchField.toLowerCase();
-    setFilteredDistributors(
-      distributors.filter((d) =>
-        [d.city, d.contact, d.address, d.name, d.firstName, d.lastName]
-          .map((v) => (v || "").toLowerCase())
-          .some((v) => v.includes(q)),
-      ),
+    const has = (v) => String(v ?? "").toLowerCase().includes(q);
+    return distributors.filter(
+      (d) =>
+        has(d.city) ||
+        has(d.contact) ||
+        has(d.address) ||
+        has(d.name) ||
+        has(d.email) ||
+        has(d.first_name) ||
+        has(d.last_name) ||
+        has(d.firstName) ||
+        has(d.lastName)
     );
-  }, [searchField, distributors]);
+  }, [distributors, searchField]);
 
   useEffect(() => {
     if (!open) {
@@ -138,36 +78,51 @@ export function AssignDistributorModal({
     }
   }, [open]);
 
+  const doAssign = async (distributorId) => {
+    try {
+      const res = await updateAssign({
+        orderID,
+        distributorID: distributorId,
+      }).unwrap();
+      const assignedOrderID = res?.order?.orderID ?? orderID;
+      onAssignSuccess?.(assignedOrderID, distributorId);
+      onClose();
+      navigate(`/chat/${distributorId}?order=${assignedOrderID}`);
+    } catch (err) {
+      toast.error(err?.data?.message || "Something went wrong.");
+    }
+  };
+
   const handleAssign = (distributorId) => {
     if (!orderID) return;
-
     if (assignedDistributorId && assignedDistributorId !== distributorId) {
       setPendingAssignId(distributorId);
       setReassignConfirmOpen(true);
     } else {
-      post({ orderID, distributorID: distributorId });
+      doAssign(distributorId);
     }
   };
 
-  const handleUnassign = (distributorId) => {
-    postUnassign({ orderID, distributorID: distributorId });
+  const handleUnassign = async (distributorId) => {
+    try {
+      await updateUnassign({ orderID, distributorID: distributorId }).unwrap();
+      toast.success("Distributor unassigned successfully.");
+      onAssignSuccess?.(orderID, null);
+    } catch (err) {
+      toast.error(err?.data?.message || "Failed to unassign distributor.");
+    }
   };
 
   const handleConfirmReassign = () => {
-    if (pendingAssignId && orderID) {
-      post({ orderID, distributorID: pendingAssignId });
-    }
+    const id = pendingAssignId;
     setReassignConfirmOpen(false);
     setPendingAssignId(null);
+    if (id && orderID) doAssign(id);
   };
 
   const handleCancelReassign = () => {
     setReassignConfirmOpen(false);
     setPendingAssignId(null);
-  };
-
-  const handleView = (distributorId) => {
-    navigate(`/distributor/${distributorId}`);
   };
 
   return (
@@ -199,12 +154,12 @@ export function AssignDistributorModal({
 
           <DistributorsTableComponent
             distributors={filteredDistributors}
-            loading={loading}
+            loading={isFetching}
             mode="assign"
             assignedDistributorId={assignedDistributorId}
             onAssign={handleAssign}
             onUnassign={handleUnassign}
-            onView={handleView}
+            onView={(id) => navigate(`/distributor/${id}`)}
           />
 
           <Pagination

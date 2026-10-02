@@ -10,108 +10,66 @@ import {
   Tooltip,
 } from "@material-tailwind/react";
 import DefaultLayout from "../layouts/defaultLayout";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { Analytics } from "../components/analytics/analyticChart";
 import { OrderTable } from "../components/molecule/orderTable/orderTable";
-import { useNavigate } from "react-router-dom";
 import { AddCityDialog } from "../components/molecule/dialogs/addCityDialog";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/solid";
 import { UpdateCityDialog } from "../components/molecule/dialogs/updateCityDialog";
-import { useDeleteCityMutation } from "../services/api";
+import {
+  useDeleteCityMutation,
+  useGetCustomerQuery,
+  useGetPriceListQuery,
+  useGetProductTotalQuery,
+  useGetTotalRevenueQuery,
+  useGetTotalSoldQuery,
+} from "../services/api";
 import { TruncateString } from "../lib/util/truncateString";
-import { socket } from "../services/socket";
-import { useDispatch, useSelector } from "react-redux";
-import { addNotification, setNotifications } from "../redux/notificationSlice";
+import { useSelector } from "react-redux";
 import { CardDetails } from "../data/cardDetails";
-import { timeSince } from "../lib/util/notificationTime";
 import useDeleteHandler from "../lib/hook/useDeleteHandler";
-import { phantomGet } from "phantom-request";
-import Cookies from "js-cookie";
 import AdvertComponent from "../components/Advert/AdvertComponent";
+import NotificationItem from "../components/notification/NotificationItem";
+
+const EMPTY = [];
 
 export default function Dashboard() {
-  const jwt = Cookies.get("jwt");
+  // Auth cookie is sent automatically by the RTK Query base query.
+  // limit: 1 is enough because we only need `totalItems`.
+  const { data: customersData, isLoading: l1 } = useGetCustomerQuery({
+    page: 1,
+    limit: 1,
+  });
+  const { data: priceListData, isLoading: l2 } = useGetPriceListQuery();
+  const { data: productsData, isLoading: l3 } = useGetProductTotalQuery();
+  const { data: revenueData, isLoading: l4 } = useGetTotalRevenueQuery();
+  const { data: soldData, isLoading: l5 } = useGetTotalSoldQuery();
 
-  const { data: customersData, loading: customerLoading } = phantomGet({
-    route: "customers",
-    token: jwt,
-  });
-  const { data: priceListData, loading: priceListLoading } = phantomGet({
-    route: "pricelist",
-  });
-  const { data: productsData, loading: productsLoading } = phantomGet({
-    route: "product/total",
-  });
-  const { data: totalRevenueData, loading: totalRevenueLoading } = phantomGet({
-    route: "order/total/order",
-  });
-  const { data: totalProductSoldData, loading: totalProductSoldLoading } =
-    phantomGet({ route: "order/total/sold" });
-  const { data: notificationsData, loading: notificationsLoading } = phantomGet(
-    { route: "notification" },
+  const totalCustomer = customersData?.totalItems ?? 0;
+  const cityPrice = priceListData?.prices ?? EMPTY;
+  const totalProducts = productsData?.totalProducts ?? 0;
+  const totalRevenue = revenueData?.totalRevenue ?? 0;
+  const totalProductSold = soldData ?? 0;
+
+  // Notifications are fetched + kept live (socket) by HeaderInfo,
+  // so here we only read them from the store.
+  const notifications = useSelector((state) => state.notifications);
+  const sortedNotifications = useMemo(
+    () =>
+      notifications
+        .slice()
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [notifications]
   );
 
-  const [totalCustomer, setTotalCustomer] = useState(0);
-  const [totalProducts, setTotalProducts] = useState(0);
-  const [totalRevenue, setTotalRevenue] = useState(0);
-  const [totalProductSold, setTotalProductSold] = useState(0);
-
   const [openCityDialog, setOpenCityDialog] = useState(false);
-  const [cityPrice, setCityPrice] = useState([]);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [selectedCityId, setSelectedCityId] = useState(null);
 
-  let navigate = useNavigate();
   const [deleteCityMutation] = useDeleteCityMutation();
   const { handleDelete } = useDeleteHandler(deleteCityMutation);
-  const dispatch = useDispatch();
 
-  const notifications = useSelector((state) => state.notifications);
-
-  // FIX 1: Socket listener for real-time notifications — runs once on mount
-  useEffect(() => {
-    socket.on("notification", (newNotification) => {
-      dispatch(addNotification(newNotification));
-    });
-
-    return () => {
-      socket.off("notification");
-    };
-  }, [dispatch]);
-
-  // FIX 2: Sync non-notification data normally
-  useEffect(() => {
-    if (customersData) setTotalCustomer(customersData?.totalItems);
-    if (priceListData) setCityPrice(priceListData.prices);
-    if (productsData) setTotalProducts(productsData.totalProducts);
-    if (totalRevenueData) setTotalRevenue(totalRevenueData.totalRevenue);
-    if (totalProductSoldData) setTotalProductSold(totalProductSoldData);
-  }, [
-    customersData,
-    priceListData,
-    productsData,
-    totalRevenueData,
-    totalProductSoldData,
-  ]);
-
-  // FIX 3: Separate effect for initial notifications fetch — runs only once
-  // New notifications are handled by the socket listener above, so we don't
-  // need to re-run this every time notificationsData changes reference.
-  useEffect(() => {
-    if (notificationsData) {
-      dispatch(setNotifications(notificationsData));
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // FIX 4: Corrected loading guard — use || (OR) not && (AND)
-  if (
-    customerLoading ||
-    priceListLoading ||
-    productsLoading ||
-    totalRevenueLoading ||
-    totalProductSoldLoading ||
-    notificationsLoading
-  ) {
+  if (l1 || l2 || l3 || l4 || l5) {
     return <div>Loading...</div>;
   }
 
@@ -147,153 +105,15 @@ export default function Dashboard() {
           </div>
           <div className="w-[30%] mt-3">
             <Card className="w-full mt-9 overflow-y-auto h-[20rem] rounded-md">
-              {notifications.length > 0 ? (
+              {sortedNotifications.length > 0 ? (
                 <List className="my-2 p-0">
-                  {notifications
-                    ?.slice()
-                    .sort(
-                      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-                    )
-                    ?.map((item, index) => {
-                      const dateObject = new Date(item?.createdAt);
-
-                      const formattedDate = dateObject.toLocaleDateString(
-                        "en-US",
-                        {
-                          year: "numeric",
-                          month: "2-digit",
-                          day: "2-digit",
-                        },
-                      );
-                      return (
-                        <div key={index}>
-                          <ListItem
-                            key={index}
-                            onClick={() => {
-                              if (item.category === "newsletter") {
-                                navigate(`/newsletter`);
-                              } else if (item.category === "support-portal") {
-                                navigate(`/support`);
-                              } else if (item.category === "account-creation") {
-                                navigate("/customer");
-                              } else if (item.category === "order") {
-                                navigate(`/order/${item.orderId}`);
-                              } else if (item.category === "market-rep") {
-                                navigate(`/order/${item.orderId}`);
-                              } else if (item.category === "driver") {
-                                navigate(`/driver`);
-                              }
-                            }}
-                            className="group flex items-start p-3 rounded-lg hover:bg-gray-100 cursor-pointer transition"
-                          >
-                            <ListItemPrefix>
-                              <div className="w-12 h-12 bg-mainGreen text-white flex items-center justify-center rounded-full">
-                                PF
-                              </div>
-                            </ListItemPrefix>
-                            <div>
-                              {item.category === "newsletter" ? (
-                                <div>
-                                  <div className="text-md font-medium text-black group-hover:text-mainGreen">
-                                    {item?.title}
-                                  </div>
-                                  <p className="text-gray-600">
-                                    {item?.message}
-                                  </p>
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    {timeSince(item.createdAt)} •{" "}
-                                    {formattedDate}
-                                  </p>
-                                </div>
-                              ) : item.category === "support-portal" ? (
-                                <div>
-                                  <div className="text-md font-medium text-black group-hover:text-mainGreen">
-                                    Support Portal Message: {item?.message}
-                                  </div>
-                                  <p className="text-gray-600">{item?.title}</p>
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    {timeSince(item.createdAt)} •{" "}
-                                    {formattedDate}
-                                  </p>
-                                </div>
-                              ) : item.category === "account-creation" ? (
-                                <div>
-                                  <div className="text-md font-medium text-black group-hover:text-mainGreen">
-                                    New Account Created: {item?.full_name}
-                                  </div>
-                                  <p className="text-gray-600">{item.title}</p>
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    {timeSince(item.createdAt)} •{" "}
-                                    {formattedDate}
-                                  </p>
-                                </div>
-                              ) : item.category === "order" ? (
-                                <div>
-                                  <div className="text-md font-medium text-gray-700 group-hover:text-mainGreen">
-                                    {item?.title}
-                                  </div>
-                                  <p className="text-gray-600">
-                                    {item?.message}
-                                  </p>
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    Order ID: {item.orderId}
-                                  </p>
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    Customer ID: {item.customer_id}
-                                  </p>
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    Created At:{" "}
-                                    {new Date(item.createdAt).toLocaleString()}
-                                  </p>
-                                </div>
-                              ) : item.category === "market-rep" ? (
-                                <div>
-                                  <div className="text-md font-medium text-gray-700 group-hover:text-mainGreen">
-                                    {item?.title}
-                                  </div>
-                                  <p className="text-gray-600">
-                                    {item?.message}
-                                  </p>
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    Created At:{" "}
-                                    {new Date(item.createdAt).toLocaleString()}
-                                  </p>
-                                </div>
-                              ) : item.category === "driver" ? (
-                                <div>
-                                  <div className="text-md font-medium text-gray-700 group-hover:text-mainGreen">
-                                    {item?.title}
-                                  </div>
-                                  <p className="text-gray-600">
-                                    {item?.message}
-                                  </p>
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    Created At:{" "}
-                                    {new Date(item.createdAt).toLocaleString()}
-                                  </p>
-                                </div>
-                              ) : (
-                                <div>
-                                  <div className="text-md font-medium text-gray-700 group-hover:text-mainGreen">
-                                    {TruncateString({
-                                      str: item?.full_name,
-                                      num: 25,
-                                    })}
-                                  </div>
-                                  <p className="text-gray-600">
-                                    {item?.message}
-                                  </p>
-                                  <p className="text-sm text-gray-400 mt-1">
-                                    {timeSince(item.createdAt)} •{" "}
-                                    {formattedDate}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </ListItem>
-                        </div>
-                      );
-                    })}
+                  {sortedNotifications.map((item, index) => (
+                    <NotificationItem
+                      key={item._id ?? index}
+                      item={item}
+                      compact
+                    />
+                  ))}
                 </List>
               ) : (
                 <div className="mx-auto pt-32 text-mainGreen capitalize text-center">
@@ -319,10 +139,10 @@ export default function Dashboard() {
             <Card className="w-[95%] mt-9 overflow-y-auto p-4 h-[20rem] rounded-md">
               <List className="my-2 p-0">
                 {cityPrice
-                  ?.slice()
+                  .slice()
                   .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                  ?.map((item, index) => (
-                    <div key={index}>
+                  .map((item, index) => (
+                    <div key={item._id ?? index}>
                       <ListItem className="group rounded-md py-1.5 px-1 text-sm font-normal text-green-gray-700 hover:bg-green-500 hover:text-white focus:bg-green-500 focus:text-white">
                         <ListItemPrefix className="flex">
                           <Tooltip content="Edit city">
@@ -345,7 +165,7 @@ export default function Dashboard() {
                             {item?.estimatePrice}
                           </div>
 
-                          <Tooltip content="Delete market">
+                          <Tooltip content="Delete city">
                             <IconButton
                               variant="text"
                               onClick={() => handleDelete(item._id)}

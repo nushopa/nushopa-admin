@@ -3,29 +3,27 @@ import { persistStore, persistReducer } from "redux-persist";
 import storage from "redux-persist/lib/storage";
 import { combineReducers } from "redux";
 import userSlice from "./user";
-import notificationSlice from "./notificationSlice"; // Import notification slice
+import notificationSlice from "./notificationSlice";
 import { adminApi } from "../services/api";
 import { cloudinaryApi } from "../services/cloudinary";
 
-// Root reducer
 const rootReducer = combineReducers({
   user: userSlice.reducer,
-  notifications: notificationSlice, // Add notification slice here
+  notifications: notificationSlice,
   [adminApi.reducerPath]: adminApi.reducer,
   [cloudinaryApi.reducerPath]: cloudinaryApi.reducer,
 });
 
-// Redux persist configuration
+// Persist only the small `user` slice (UI profile info, no token).
+// API caches and notifications are not written to localStorage.
 const persistConfig = {
   key: "root",
-  storage: storage,
-  // You can add other configuration options here if needed
+  storage,
+  whitelist: ["user"],
 };
 
-// Create a persisted reducer
 const persistedReducer = persistReducer(persistConfig, rootReducer);
 
-// Configure the store
 const store = configureStore({
   reducer: persistedReducer,
   middleware: (getDefaultMiddleware) =>
@@ -35,7 +33,6 @@ const store = configureStore({
     ),
 });
 
-// Create a persistor
 const persistor = persistStore(store);
 
 export { store, persistor };

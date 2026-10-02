@@ -1,14 +1,29 @@
+import { useEffect } from "react";
 import { Outlet, Navigate } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
+import { useGetProfileQuery } from "../../services/api";
+import { addUser } from "../../redux/user";
+import { Loader } from '../../../../nushopa/src/components/molecule/loader/tabLoader';
+
+const ADMIN_ROLE = 5000;
 
 function ProtectedRoute() {
-  const userId = localStorage.getItem("userId");
-  const user = useSelector((state) => state.user);
+  const dispatch = useDispatch();
+  const { data, isLoading, isError } = useGetProfileQuery(undefined, {
+    refetchOnMountOrArgChange: true,
+  });
+  const user = data?.customer;
 
-  // Check if the user is logged in and the authentication token and userId exist
-  const isLoggedIn = user.isLoggedIn && userId && userId !== "" && userId !== undefined && userId !== null;
+  // keep redux in sync so the rest of the app (navbar etc.) still has the user
+  useEffect(() => {
+    if (user?.role === ADMIN_ROLE) dispatch(addUser(user));
+  }, [user, dispatch]);
 
-  return isLoggedIn ? <Outlet /> : <Navigate to="/sign-in" replace />;
+  if (isLoading) return <Loader />;
+  if (isError || !user || user.role !== ADMIN_ROLE) {
+    return <Navigate to="/sign-in" replace />;
+  }
+  return <Outlet />;
 }
 
 export default ProtectedRoute;
