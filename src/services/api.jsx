@@ -56,13 +56,14 @@ export const adminApi = createApi({
       query: () => ({ url: "logout", method: "POST" }),
     }),
 
-    // ---------- Products ----------
+    // ---------- Products (aligned with product.router.js) ----------
     singleProduct: builder.query({
-      query: (id) => `product/get/${id}`,
+      query: (id) => `product/${id}`,
       providesTags: ["Product"],
     }),
+    // Backend filters by `q` (product_cat), not `product_cat`
     relatedProducts: builder.query({
-      query: (productCat) => `product?product_cat=${encodeURIComponent(productCat)}`,
+      query: (productCat) => `product?q=${encodeURIComponent(productCat)}`,
       providesTags: ["Product"],
     }),
     getProduct: builder.query({
@@ -73,28 +74,29 @@ export const adminApi = createApi({
       query: (args) => ({ url: "product", params: paged(args) }),
       providesTags: ["Product"],
     }),
+    // Returns { totalProducts }
     getProductTotal: builder.query({
-      query: () => "product/total",
+      query: () => "product/count",
       providesTags: ["Product"],
     }),
     addProduct: builder.mutation({
-      query: (data) => ({ url: "product/add", method: "POST", body: data }),
+      query: (data) => ({ url: "product", method: "POST", body: data }),
       invalidatesTags: ["Product"],
     }),
     updateProduct: builder.mutation({
-      query: (data) => ({ url: "product/update", method: "PUT", body: data }),
+      query: (data) => ({ url: "product", method: "PUT", body: data }),
       invalidatesTags: ["Product"],
     }),
     toggleProductStock: builder.mutation({
       query: ({ id, out_of_stock }) => ({
-        url: "product/toggle-stock",
+        url: "product/stock",
         method: "PATCH",
         body: { id, out_of_stock },
       }),
       invalidatesTags: ["Product"],
     }),
     deleteProduct: builder.mutation({
-      query: (id) => ({ url: `product/remove/${id}`, method: "DELETE" }),
+      query: (id) => ({ url: `product/${id}`, method: "DELETE" }),
       invalidatesTags: ["Product"],
     }),
     getCategory: builder.query({ query: () => "cartegorie/get" }),

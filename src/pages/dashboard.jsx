@@ -10,7 +10,7 @@ import {
   Tooltip,
 } from "@material-tailwind/react";
 import DefaultLayout from "../layouts/defaultLayout";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Analytics } from "../components/analytics/analyticChart";
 import { OrderTable } from "../components/molecule/orderTable/orderTable";
 import { AddCityDialog } from "../components/molecule/dialogs/addCityDialog";
@@ -34,22 +34,31 @@ import NotificationItem from "../components/notification/NotificationItem";
 const EMPTY = [];
 
 export default function Dashboard() {
-  // Auth cookie is sent automatically by the RTK Query base query.
-  // limit: 1 is enough because we only need `totalItems`.
   const { data: customersData, isLoading: l1 } = useGetCustomerQuery({
     page: 1,
     limit: 1,
   });
   const { data: priceListData, isLoading: l2 } = useGetPriceListQuery();
-  const { data: productsData, isLoading: l3 } = useGetProductTotalQuery();
+  const {
+    data: productsData,
+    isLoading: l3,
+    error: productsError,
+  } = useGetProductTotalQuery();
   const { data: revenueData, isLoading: l4 } = useGetTotalRevenueQuery();
   const { data: soldData, isLoading: l5 } = useGetTotalSoldQuery();
+
+  // Surface failures instead of silently showing 0
+  useEffect(() => {
+    if (productsError) console.error("Product total failed:", productsError);
+  }, [productsError]);
 
   const totalCustomer = customersData?.totalItems ?? 0;
   const cityPrice = priceListData?.prices ?? EMPTY;
   const totalProducts = productsData?.totalProducts ?? 0;
   const totalRevenue = revenueData?.totalRevenue ?? 0;
-  const totalProductSold = soldData ?? 0;
+  // Accepts either a plain number or an object like { totalSold }
+  const totalProductSold =
+    typeof soldData === "number" ? soldData : soldData?.totalSold ?? 0;
 
   // Notifications are fetched + kept live (socket) by HeaderInfo,
   // so here we only read them from the store.
@@ -60,6 +69,14 @@ export default function Dashboard() {
         .slice()
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
     [notifications]
+  );
+
+  const sortedCities = useMemo(
+    () =>
+      cityPrice
+        .slice()
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [cityPrice]
   );
 
   const [openCityDialog, setOpenCityDialog] = useState(false);
@@ -138,45 +155,42 @@ export default function Dashboard() {
             </Badge>
             <Card className="w-[95%] mt-9 overflow-y-auto p-4 h-[20rem] rounded-md">
               <List className="my-2 p-0">
-                {cityPrice
-                  .slice()
-                  .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                  .map((item, index) => (
-                    <div key={item._id ?? index}>
-                      <ListItem className="group rounded-md py-1.5 px-1 text-sm font-normal text-green-gray-700 hover:bg-green-500 hover:text-white focus:bg-green-500 focus:text-white">
-                        <ListItemPrefix className="flex">
-                          <Tooltip content="Edit city">
-                            <IconButton
-                              variant="text"
-                              onClick={() => handleUpdateOpen(item?._id)}
-                            >
-                              <PencilIcon className="h-4 w-4" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip content={item?.city}>
-                            <div>
-                              {TruncateString({ str: item?.city, num: 15 })}
-                            </div>
-                          </Tooltip>
-                        </ListItemPrefix>
-
-                        <ListItemSuffix className="flex">
-                          <div className="font-workSans text-md text-mainGreen hover:text-black">
-                            {item?.estimatePrice}
+                {sortedCities.map((item, index) => (
+                  <div key={item._id ?? index}>
+                    <ListItem className="group rounded-md py-1.5 px-1 text-sm font-normal text-green-gray-700 hover:bg-green-500 hover:text-white focus:bg-green-500 focus:text-white">
+                      <ListItemPrefix className="flex">
+                        <Tooltip content="Edit city">
+                          <IconButton
+                            variant="text"
+                            onClick={() => handleUpdateOpen(item?._id)}
+                          >
+                            <PencilIcon className="h-4 w-4" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip content={item?.city}>
+                          <div>
+                            {TruncateString({ str: item?.city, num: 15 })}
                           </div>
+                        </Tooltip>
+                      </ListItemPrefix>
 
-                          <Tooltip content="Delete city">
-                            <IconButton
-                              variant="text"
-                              onClick={() => handleDelete(item._id)}
-                            >
-                              <TrashIcon className="h-4 w-4 text-red-900" />
-                            </IconButton>
-                          </Tooltip>
-                        </ListItemSuffix>
-                      </ListItem>
-                    </div>
-                  ))}
+                      <ListItemSuffix className="flex">
+                        <div className="font-workSans text-md text-mainGreen hover:text-black">
+                          {item?.estimatePrice}
+                        </div>
+
+                        <Tooltip content="Delete city">
+                          <IconButton
+                            variant="text"
+                            onClick={() => handleDelete(item._id)}
+                          >
+                            <TrashIcon className="h-4 w-4 text-red-900" />
+                          </IconButton>
+                        </Tooltip>
+                      </ListItemSuffix>
+                    </ListItem>
+                  </div>
+                ))}
               </List>
             </Card>
           </div>
