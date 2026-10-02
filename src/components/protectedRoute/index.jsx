@@ -3,8 +3,7 @@ import { Outlet, Navigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { useGetProfileQuery } from "../../services/api";
 import { addUser } from "../../redux/user";
-import { Loader } from '../../../../nushopa/src/components/molecule/loader/tabLoader';
-
+import { Loader } from "../common/loaders/index";
 const ADMIN_ROLE = 5000;
 
 function ProtectedRoute() {
