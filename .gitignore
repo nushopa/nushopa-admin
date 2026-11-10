@@ -10,6 +10,8 @@ lerna-debug.log*
 # Dependencies
 node_modules
 dist
+playwright-report
+test-results
 dist-ssr
 
 # Environment variables

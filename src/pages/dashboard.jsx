@@ -28,7 +28,6 @@ import { TruncateString } from "../lib/util/truncateString";
 import { useSelector } from "react-redux";
 import { CardDetails } from "../data/cardDetails";
 import useDeleteHandler from "../lib/hook/useDeleteHandler";
-import AdvertComponent from "../components/Advert/AdvertComponent";
 import NotificationItem from "../components/notification/NotificationItem";
 
 const EMPTY = [];
@@ -58,7 +57,7 @@ export default function Dashboard() {
   const totalRevenue = revenueData?.totalRevenue ?? 0;
   // Accepts either a plain number or an object like { totalSold }
   const totalProductSold =
-    typeof soldData === "number" ? soldData : soldData?.totalSold ?? 0;
+    typeof soldData === "number" ? soldData : (soldData?.totalSold ?? 0);
 
   // Notifications are fetched + kept live (socket) by HeaderInfo,
   // so here we only read them from the store.
@@ -68,7 +67,7 @@ export default function Dashboard() {
       notifications
         .slice()
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-    [notifications]
+    [notifications],
   );
 
   const sortedCities = useMemo(
@@ -76,7 +75,7 @@ export default function Dashboard() {
       cityPrice
         .slice()
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-    [cityPrice]
+    [cityPrice],
   );
 
   const [openCityDialog, setOpenCityDialog] = useState(false);
@@ -146,13 +145,16 @@ export default function Dashboard() {
             <OrderTable />
           </div>
           <div className="w-[20%]">
-            <AdvertComponent />
-
-            <Badge content={cityPrice.length}>
-              <Button className="bg-mainGreen" onClick={handleOpenCityDialog}>
-                Add City
-              </Button>
-            </Badge>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="font-workSans text-lg font-semibold">
+                Delivery fees by city
+              </div>
+              <Badge content={cityPrice.length}>
+                <Button className="bg-mainGreen" onClick={handleOpenCityDialog}>
+                  Add delivery area
+                </Button>
+              </Badge>
+            </div>
             <Card className="w-[95%] mt-9 overflow-y-auto p-4 h-[20rem] rounded-md">
               <List className="my-2 p-0">
                 {sortedCities.map((item, index) => (
@@ -176,7 +178,7 @@ export default function Dashboard() {
 
                       <ListItemSuffix className="flex">
                         <div className="font-workSans text-md text-mainGreen hover:text-black">
-                          {item?.estimatePrice}
+                          ₦{item?.estimatePrice}
                         </div>
 
                         <Tooltip content="Delete city">

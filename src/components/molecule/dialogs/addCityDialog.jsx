@@ -29,27 +29,31 @@ export function AddCityDialog({ handleOpen, open }) {
   };
 
   const handleSubmit = async () => {
-    setLoading(true);
-    const postDataInfo = {
-      city: formData.city,
-      estimatePrice: formData.estimatePrice,
-    };
-    try {
-      // Continue with market submission
-      await addCity(postDataInfo)
-        .then((res) => {
-          if (!res.error) {
-            toast.success("city successfully added");
-            window.location.reload();
-            handleOpen(false);
-          } else {
-            alert(res.error.data.message);
-          }
-        })
-    } catch (error) {
-      toast.error("Error submitting market");
+    const estimatePrice = Number(formData.estimatePrice);
+    if (
+      !formData.city.trim() ||
+      formData.estimatePrice === "" ||
+      !Number.isFinite(estimatePrice) ||
+      estimatePrice < 0
+    ) {
+      toast.error("Enter a city and a valid non-negative delivery fee.");
+      return;
     }
-    setLoading(false);
+
+    setLoading(true);
+    try {
+      await addCity({
+        city: formData.city.trim(),
+        estimatePrice,
+      }).unwrap();
+      toast.success("Delivery area added.");
+      handleOpen(false);
+    } catch (error) {
+      console.error("Could not add delivery area:", error);
+      toast.error(error?.data?.message || "Could not add delivery area.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -63,7 +67,7 @@ export function AddCityDialog({ handleOpen, open }) {
         <Card className="mx-auto w-full max-w-full">
           <CardBody className="flex overflow-y-auto h-[20rem] flex-col gap-4">
             <Typography variant="h4" color="blue-gray">
-              Add City
+              Add delivery area
             </Typography>
             <div className="flex gap-3 w-full">
               <div className="w-full">
@@ -80,11 +84,13 @@ export function AddCityDialog({ handleOpen, open }) {
 
             <div className="flex gap-3 w-full">
               <div className="w-full">
-                <Typography variant="h6">Estimate Price</Typography>
+                <Typography variant="h6">Delivery fee (₦)</Typography>
                 <Input
-                  label="Estimate Price"
+                  label="Delivery fee"
                   size="lg"
                   type="number"
+                  min="0"
+                  step="1"
                   name="estimatePrice"
                   value={formData.estimatePrice}
                   onChange={handleChange}

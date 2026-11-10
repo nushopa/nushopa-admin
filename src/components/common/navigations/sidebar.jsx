@@ -10,6 +10,7 @@ import {
   NewspaperIcon as NewsletterSolid,
   UserGroupIcon as RepsSolid,
   LifebuoyIcon as SupportSolid,
+  PhotoIcon as AdvertsSolid,
 } from "@heroicons/react/24/solid";
 import {
   PresentationChartBarIcon as DashboardOutline,
@@ -19,6 +20,7 @@ import {
   NewspaperIcon as NewsletterOutline,
   UserGroupIcon as RepsOutline,
   LifebuoyIcon as SupportOutline,
+  PhotoIcon as AdvertsOutline,
   ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
 import { adminApi, useLogoutAdminMutation } from "../../../services/api";
@@ -31,14 +33,55 @@ const DRIVER_ICON =
 const ICON = "h-5 w-5 shrink-0";
 
 const menuItems = [
-  { label: "Dashboard", path: "/", icon: DashboardOutline, activeIcon: DashboardSolid },
-  { label: "Products", path: "/products", icon: ProductsOutline, activeIcon: ProductsSolid },
-  { label: "Customers", path: "/customer", icon: CustomersOutline, activeIcon: CustomersSolid },
-  { label: "Orders", path: "/order", icon: OrdersOutline, activeIcon: OrdersSolid },
-  { label: "Newsletter", path: "/newsletter", icon: NewsletterOutline, activeIcon: NewsletterSolid },
-  { label: "Market Rep", path: "/distributors", icon: RepsOutline, activeIcon: RepsSolid },
+  {
+    label: "Dashboard",
+    path: "/",
+    icon: DashboardOutline,
+    activeIcon: DashboardSolid,
+  },
+  {
+    label: "Products",
+    path: "/products",
+    icon: ProductsOutline,
+    activeIcon: ProductsSolid,
+  },
+  {
+    label: "Customers",
+    path: "/customer",
+    icon: CustomersOutline,
+    activeIcon: CustomersSolid,
+  },
+  {
+    label: "Orders",
+    path: "/order",
+    icon: OrdersOutline,
+    activeIcon: OrdersSolid,
+  },
+  {
+    label: "Newsletter",
+    path: "/newsletter",
+    icon: NewsletterOutline,
+    activeIcon: NewsletterSolid,
+  },
+  {
+    label: "Adverts",
+    path: "/gallery",
+    icon: AdvertsOutline,
+    activeIcon: AdvertsSolid,
+  },
+  {
+    label: "Market Rep",
+    path: "/distributors",
+    icon: RepsOutline,
+    activeIcon: RepsSolid,
+  },
   { label: "Driver", path: "/driver", image: DRIVER_ICON },
-  { label: "Support", path: "/support-message", icon: SupportOutline, activeIcon: SupportSolid },
+  {
+    label: "Support",
+    path: "/support-message",
+    icon: SupportOutline,
+    activeIcon: SupportSolid,
+  },
 ];
 
 function NavButton({ item, expanded, active, onClick }) {
@@ -99,7 +142,9 @@ export function Sidebar() {
   const [logoutAdmin, { isLoading: loggingOut }] = useLogoutAdminMutation();
 
   const isActive = (path) =>
-    path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
+    path === "/"
+      ? location.pathname === "/"
+      : location.pathname.startsWith(path);
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -110,7 +155,7 @@ export function Sidebar() {
       if (err?.status !== 401) {
         console.error("Logout request failed:", err);
         toast.error(
-          err?.data?.message || "Could not reach the server to log out."
+          err?.data?.message || "Could not reach the server to log out.",
         );
       }
     } finally {

@@ -1,18 +1,22 @@
 import { useState, useRef } from "react";
 import { useUploadAdvertMutation } from "../../services/api";
+import { toast } from "react-toastify";
 
 export default function UploadModal({ onClose, onUpload }) {
   const [dragging, setDragging] = useState(false);
   const [preview, setPreview] = useState(null);
   const [file, setFile] = useState(null);
-  const [title, setTitle] = useState(""); 
+  const [title, setTitle] = useState("");
   const inputRef = useRef();
 
-  const [uploadAdvert, {isLoading}] = useUploadAdvertMutation();
-
+  const [uploadAdvert, { isLoading }] = useUploadAdvertMutation();
 
   const handleFile = (f) => {
-    if (!f || !f.type.startsWith("image/")) return;
+    if (!f) return;
+    if (!f.type.startsWith("image/")) {
+      toast.error("Choose an image file to upload.");
+      return;
+    }
     setFile(f);
     const reader = new FileReader();
     reader.onload = (e) => setPreview(e.target.result);
@@ -25,18 +29,23 @@ export default function UploadModal({ onClose, onUpload }) {
     handleFile(e.dataTransfer.files[0]);
   };
 
-  const handleConfirm = async() => {
+  const handleConfirm = async () => {
     if (!file) return;
+    if (!title.trim()) {
+      toast.error("Enter a title for this advert.");
+      return;
+    }
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("title", title);
+    formData.append("title", title.trim());
 
     try {
       const result = await uploadAdvert(formData).unwrap();
       onUpload(result.advert);
     } catch (error) {
-      console.error("Upload failed:", error)
+      console.error("Advert upload failed:", error);
+      toast.error(error?.data?.message || "Advert upload failed.");
     }
   };
 
@@ -70,6 +79,7 @@ export default function UploadModal({ onClose, onUpload }) {
         {/* Title Input */}
         <input
           type="text"
+          aria-label="Advert title"
           placeholder="Enter a title..."
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -79,9 +89,10 @@ export default function UploadModal({ onClose, onUpload }) {
         {/* Dropzone */}
         <div
           className={`border-2 border-dashed rounded-xl flex items-center justify-center min-h-[180px] cursor-pointer transition-all duration-200 overflow-hidden
-            ${dragging
-              ? "border-amber-400 bg-amber-400/5"
-              : "border-zinc-700 hover:border-zinc-500 bg-zinc-900/40"
+            ${
+              dragging
+                ? "border-amber-400 bg-amber-400/5"
+                : "border-zinc-700 hover:border-zinc-500 bg-zinc-900/40"
             }`}
           onDragOver={(e) => {
             e.preventDefault();
@@ -89,7 +100,7 @@ export default function UploadModal({ onClose, onUpload }) {
           }}
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
-          onClick={() => inputRef.current.click()}
+          onClick={() => inputRef.current?.click()}
         >
           {preview ? (
             <img
@@ -101,7 +112,8 @@ export default function UploadModal({ onClose, onUpload }) {
             <div className="text-center px-6 py-10">
               <div className="text-4xl text-amber-400 mb-3 leading-none">↑</div>
               <p className="text-zinc-400 text-sm mb-1">
-                Drag & drop or <span className="text-amber-400 underline">browse</span>
+                Drag & drop or{" "}
+                <span className="text-amber-400 underline">browse</span>
               </p>
               <p className="text-zinc-600 text-[11px] tracking-[2px] font-mono mt-2">
                 PNG · JPG · GIF · WEBP
@@ -115,7 +127,7 @@ export default function UploadModal({ onClose, onUpload }) {
           type="file"
           accept="image/*"
           className="hidden"
-          onChange={(e) => handleFile(e.target.files[0])}
+          onChange={(e) => handleFile(e.target.files?.[0])}
         />
 
         {/* Actions */}
@@ -134,11 +146,12 @@ export default function UploadModal({ onClose, onUpload }) {
           )}
           <button
             onClick={handleConfirm}
-            disabled={!preview || isLoading}
+            disabled={!preview || !title.trim() || isLoading}
             className={`px-6 py-2.5 rounded-lg text-sm transition-all duration-200 font-medium
-              ${preview
-                ? "bg-amber-400 text-zinc-950 hover:bg-amber-300 hover:-translate-y-0.5 shadow-lg shadow-amber-400/20 cursor-pointer"
-                : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
+              ${
+                preview
+                  ? "bg-amber-400 text-zinc-950 hover:bg-amber-300 hover:-translate-y-0.5 shadow-lg shadow-amber-400/20 cursor-pointer"
+                  : "bg-zinc-800 text-zinc-600 cursor-not-allowed"
               }`}
           >
             {isLoading ? "Uploading..." : "Upload Image →"}
