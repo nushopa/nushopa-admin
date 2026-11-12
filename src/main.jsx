@@ -9,6 +9,8 @@ import { ThemeProvider } from "@material-tailwind/react";
 import "./config/phantom.config.js";
 import CookieGate from "./components/cookies/CookieGate.jsx";
 import SessionLoader from "./components/cookies/SessionLoader.jsx";
+import { initializeAnalytics } from "./lib/analytics";
+initializeAnalytics();
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ThemeProvider>

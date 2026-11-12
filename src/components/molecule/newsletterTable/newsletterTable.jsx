@@ -43,13 +43,15 @@ export function NewsletterTable() {
   const filteredDetails = useMemo(() => {
     const term = searchField.toLowerCase();
     return newsLetter.filter((n) =>
-      String(n.email ?? "").toLowerCase().includes(term)
+      String(n.email ?? "")
+        .toLowerCase()
+        .includes(term),
     );
   }, [newsLetter, searchField]);
 
   const handleCheckboxChange = (email) => {
     setSelectedEmails((prev) =>
-      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email],
     );
   };
 
@@ -168,13 +170,6 @@ export function NewsletterTable() {
         onPageChange={setCurrentPage}
       />
       <div className="flex w-full mb-10 mt-5 shrink-0 gap-2 md:w-max">
-        <Button
-          className="px-8 shadow-sm py-3 bg-mainGreen text-white rounded-[10px] border border-[#7B7B7B] justify-center items-center gap-2 inline-flex"
-          size="lg"
-          disabled
-        >
-          send sms
-        </Button>
         <Button
           className="px-8 shadow-sm py-3 bg-transparent text-mainGreen rounded-[10px] border border-mainGreen justify-center items-center gap-2 inline-flex"
           size="lg"

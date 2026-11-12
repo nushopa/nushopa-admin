@@ -42,19 +42,22 @@ export function CustomerTable() {
 
   const filteredDetails = useMemo(() => {
     const term = searchField.toLowerCase();
-    const has = (v) => String(v ?? "").toLowerCase().includes(term);
+    const has = (v) =>
+      String(v ?? "")
+        .toLowerCase()
+        .includes(term);
     return details.filter(
       (c) =>
         has(c.email) ||
         has(c.first_name) ||
         has(c.last_name) ||
-        has(c.phone_number)
+        has(c.phone_number),
     );
   }, [details, searchField]);
 
   const handleCheckboxChange = (email) => {
     setSelectedEmails((prev) =>
-      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email],
     );
   };
 
@@ -147,16 +150,19 @@ export function CustomerTable() {
                       createdAt,
                       role,
                     },
-                    index
+                    index,
                   ) => {
                     const isLast = index === filteredDetails.length - 1;
                     const classes = isLast
                       ? "p-4"
                       : "p-4 border-b border-blue-gray-50";
-                    const formattedDate = new Date(createdAt).toLocaleDateString(
-                      "en-US",
-                      { year: "numeric", month: "2-digit", day: "2-digit" }
-                    );
+                    const formattedDate = new Date(
+                      createdAt,
+                    ).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                    });
 
                     return (
                       <tr
@@ -231,7 +237,7 @@ export function CustomerTable() {
                         </td>
                       </tr>
                     );
-                  }
+                  },
                 )
             )}
           </tbody>
@@ -243,13 +249,6 @@ export function CustomerTable() {
         onPageChange={setCurrentPage}
       />
       <div className="flex w-full mb-10 mt-5 shrink-0 gap-2 md:w-max">
-        <Button
-          className="px-8 shadow-sm py-3 bg-mainGreen text-white rounded-[10px] border border-[#7B7B7B] justify-center items-center gap-2 inline-flex"
-          size="lg"
-          disabled
-        >
-          send sms
-        </Button>
         <Button
           className="px-8 shadow-sm py-3 bg-transparent text-mainGreen rounded-[10px] border border-mainGreen justify-center items-center gap-2 inline-flex"
           size="lg"

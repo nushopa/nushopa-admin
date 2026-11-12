@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useSelector } from "react-redux";
 import { BellSlashIcon } from "@heroicons/react/24/solid";
 import NotificationItem from "../components/notification/NotificationItem";
+import EnablePushNotifications from "../components/notification/EnablePushNotifications";
 
 export default function NotificationPage() {
   // HeaderInfo (rendered by the layout) fetches the list with RTK Query and
@@ -15,7 +16,7 @@ export default function NotificationPage() {
       notifications
         .slice()
         .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-    [notifications]
+    [notifications],
   );
 
   return (
@@ -24,6 +25,7 @@ export default function NotificationPage() {
         <h1 className="text-2xl font-semibold text-mainGreen mb-4">
           Notifications
         </h1>
+        <EnablePushNotifications />
         <div className="flex flex-col lg:flex-row gap-6">
           <div className="flex-1">
             <Card className="p-6 rounded-lg shadow-lg overflow-hidden bg-white">
