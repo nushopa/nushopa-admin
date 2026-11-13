@@ -149,6 +149,22 @@ export default function OrderDetails() {
               <Row label="Order ID" value={`#${id}`} bold />
               <Row label="Date" value={formattedDate} />
               <Row
+                label="Delivery method"
+                value={
+                  order.delivery_mode === "fast"
+                    ? "Fast delivery"
+                    : "Standard delivery"
+                }
+              />
+              <Row
+                label="Delivery fee"
+                value={
+                  order.delivery_fee == null
+                    ? "—"
+                    : `₦${AddCommasToNumber(order.delivery_fee)}`
+                }
+              />
+              <Row
                 label="Amount paid"
                 value={`₦${AddCommasToNumber(amount_paid ?? 0)}`}
                 bold
@@ -190,7 +206,8 @@ export default function OrderDetails() {
             </thead>
             <tbody>
               {(products ?? []).map((item, i) => {
-                const img = item.product_id?.product_image ?? item.product_image;
+                const img =
+                  item.product_id?.product_image ?? item.product_image;
                 return (
                   <tr
                     key={i}

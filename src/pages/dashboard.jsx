@@ -16,6 +16,7 @@ import { OrderTable } from "../components/molecule/orderTable/orderTable";
 import { AddCityDialog } from "../components/molecule/dialogs/addCityDialog";
 import { PencilIcon, TrashIcon } from "@heroicons/react/24/solid";
 import { UpdateCityDialog } from "../components/molecule/dialogs/updateCityDialog";
+import { FastDeliveryConfigDialog } from "../components/molecule/dialogs/fastDeliveryConfigDialog";
 import {
   useDeleteCityMutation,
   useGetCustomerQuery,
@@ -81,6 +82,7 @@ export default function Dashboard() {
   const [openCityDialog, setOpenCityDialog] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const [selectedCityId, setSelectedCityId] = useState(null);
+  const [fastDeliveryConfigOpen, setFastDeliveryConfigOpen] = useState(false);
 
   const [deleteCityMutation] = useDeleteCityMutation();
   const { handleDelete } = useDeleteHandler(deleteCityMutation);
@@ -104,6 +106,10 @@ export default function Dashboard() {
         open={updateOpen}
         handleOpen={() => setUpdateOpen(false)}
         CityId={selectedCityId}
+      />
+      <FastDeliveryConfigDialog
+        open={fastDeliveryConfigOpen}
+        handleOpen={setFastDeliveryConfigOpen}
       />
       <div className="px-3 pt-6 font-medium my-2">
         <CardDetails
@@ -195,6 +201,13 @@ export default function Dashboard() {
                 ))}
               </List>
             </Card>
+            <Button
+              variant="outlined"
+              className="mt-4 w-[95%]"
+              onClick={() => setFastDeliveryConfigOpen(true)}
+            >
+              Configure fast delivery API
+            </Button>
           </div>
         </div>
       </div>

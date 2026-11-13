@@ -30,6 +30,7 @@ export const adminApi = createApi({
     "Order",
     "Notification",
     "PriceList",
+    "DeliveryProvider",
     "Contact",
   ],
   baseQuery,
@@ -290,6 +291,18 @@ export const adminApi = createApi({
       query: (id) => ({ url: `pricelist/delete/${id}`, method: "DELETE" }),
       invalidatesTags: ["PriceList"],
     }),
+    getFastDeliveryConfig: builder.query({
+      query: () => "checkout/delivery-provider",
+      providesTags: ["DeliveryProvider"],
+    }),
+    updateFastDeliveryConfig: builder.mutation({
+      query: (data) => ({
+        url: "checkout/delivery-provider",
+        method: "PUT",
+        body: data,
+      }),
+      invalidatesTags: ["DeliveryProvider"],
+    }),
 
     // ---------- Newsletter ----------
     getNewsletter: builder.query({
@@ -388,6 +401,8 @@ export const {
   useAddCityMutation,
   useUpdateCityMutation,
   useDeleteCityMutation,
+  useGetFastDeliveryConfigQuery,
+  useUpdateFastDeliveryConfigMutation,
   useGetNewsletterQuery,
   useDeleteNewsletterMutation,
   useGetContactsQuery,
